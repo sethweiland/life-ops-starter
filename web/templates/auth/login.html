@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sign in · Life Ops</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<main class="container auth-panel">
+    <h1>Sign in to Life Ops</h1>
+    <p>Enter your owner access key to open your private dashboard.</p>
+    {% if error %}<p role="alert">{{ error }}</p>{% endif %}
+    <form method="post" action="{{ url_for('auth.login') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="access-key">Access key</label>
+        <input id="access-key" name="access_key" type="password" autocomplete="current-password" required autofocus>
+        <button type="submit">Sign in</button>
+    </form>
+    <p>Use the key saved during your installation setup.</p>
+</main>
+</body>
+</html>

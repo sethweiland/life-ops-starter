@@ -1,0 +1,110 @@
+{
+  "updated_at": null,
+  "routines": [
+    {
+      "id": "example-support-watch",
+      "name": "Example service support watch",
+      "owner_agent": "researcher",
+      "category": "support",
+      "enabled": true,
+      "schedule": "0 9 * * 1",
+      "schedule_human": "Mondays at 9:00am (agent timezone)",
+      "last_run_at": null,
+      "status": "example",
+      "blurb": "Watch the Example service support thread for new replies",
+      "links": {
+        "ops": null
+      }
+    },
+    {
+      "id": "writing-practice-reminder",
+      "name": "Writing practice reminder",
+      "owner_agent": "researcher",
+      "category": "music",
+      "enabled": true,
+      "schedule": "0 9 * * 1",
+      "schedule_human": "Mondays at 9:00am (agent timezone)",
+      "last_run_at": null,
+      "status": "example",
+      "blurb": "Nudge on writing practice",
+      "links": {
+        "ops": null
+      }
+    },
+    {
+      "id": "northbridge-tba-kickoff-watch",
+      "name": "Northbridge TBA kickoff watch",
+      "owner_agent": "researcher",
+      "category": "sports",
+      "enabled": true,
+      "schedule": "0 9 * * 1",
+      "schedule_human": "Mondays at 9:00am (agent timezone)",
+      "last_run_at": null,
+      "status": "example",
+      "blurb": "Watch Northbridge TBA kickoff listings",
+      "links": {
+        "ops": null
+      }
+    },
+    {
+      "id": "x-follow-candidates",
+      "name": "X follow candidates",
+      "owner_agent": "researcher",
+      "category": "x",
+      "enabled": true,
+      "schedule": "0 9 * * 1",
+      "schedule_human": "Mondays at 9:00am (agent timezone)",
+      "last_run_at": null,
+      "status": "example",
+      "blurb": "Draft X follow candidates for review",
+      "links": {
+        "ops": null
+      }
+    },
+    {
+      "id": "x-reply-candidates",
+      "name": "X reply candidates",
+      "owner_agent": "researcher",
+      "category": "x",
+      "enabled": true,
+      "schedule": "0 9 * * 1",
+      "schedule_human": "Mondays at 9:00am (agent timezone)",
+      "last_run_at": null,
+      "status": "example",
+      "blurb": "Draft X reply candidates for review",
+      "links": {
+        "ops": null
+      }
+    },
+    {
+      "id": "x-tweet-drafts",
+      "name": "X tweet drafts",
+      "owner_agent": "researcher",
+      "category": "x",
+      "enabled": true,
+      "schedule": "0 9 * * 1",
+      "schedule_human": "Mondays at 9:00am (agent timezone)",
+      "last_run_at": null,
+      "status": "example",
+      "blurb": "Draft X tweet candidates for review",
+      "links": {
+        "ops": null
+      }
+    },
+    {
+      "id": "pantry-restock",
+      "name": "Pantry restock",
+      "owner_agent": "helper",
+      "category": "shopping",
+      "enabled": true,
+      "schedule": "0 9 * * 1",
+      "schedule_human": "Mondays at 9:00am (agent timezone)",
+      "last_run_at": null,
+      "status": "example",
+      "blurb": "Prepare a pantry checklist for review",
+      "links": {
+        "ops": null
+      }
+    }
+  ]
+}

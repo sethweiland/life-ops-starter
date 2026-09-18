@@ -1,0 +1,66 @@
+{
+  "match": [
+    {
+      "id": "northbridge",
+      "match_title_contains": ["Northbridge"],
+      "logo_url": "https://assets.example.com/northbridge.png",
+      "emoji": "🏈",
+      "color": "#2D68C4"
+    },
+    {
+      "id": "harbor",
+      "match_title_contains": ["Harbor"],
+      "logo_url": "https://assets.example.com/harbor.png",
+      "emoji": "⚽",
+      "color": "#C8102E"
+    }
+  ],
+  "teams": [
+    {
+      "id": "northbridge",
+      "name": "Northbridge",
+      "aliases": ["Northbridge", "Northbridge Bears"],
+      "logo_url": "https://assets.example.com/northbridge.png"
+    },
+    {
+      "id": "harbor",
+      "name": "Harbor",
+      "aliases": ["Harbor", "Harbor FC"],
+      "logo_url": "https://assets.example.com/harbor.png"
+    },
+    {
+      "id": "eastfield",
+      "name": "Eastfield",
+      "aliases": ["Eastfield", "Eastfield Boilermakers"],
+      "logo_url": "https://assets.example.com/team-2509.png"
+    },
+    {
+      "id": "lakeside",
+      "name": "Lakeside",
+      "aliases": ["Lakeside", "Lakeside Terrapins"],
+      "logo_url": "https://assets.example.com/team-120.png"
+    },
+    {
+      "id": "westhaven",
+      "name": "Westhaven",
+      "aliases": ["Westhaven", "Westhaven United", "Spurs"],
+      "logo_url": "https://assets.example.com/team-86.png"
+    },
+    {
+      "id": "bayport",
+      "name": "AFC Bayport",
+      "aliases": ["AFC Bayport", "Bayport"],
+      "logo_url": "https://assets.example.com/team-349.png"
+    }
+  ],
+  "title_parse": {
+    "separators": ["vs", "@", "against", "v", "—"]
+  },
+  "categories": [
+    {"id": "sports", "color": "#2563eb", "google_color_id": "9"},
+    {"id": "music", "color": "#be185d", "google_color_id": "4"},
+    {"id": "family_friends", "color": "#059669", "google_color_id": "10"},
+    {"id": "travel", "color": "#d97706", "google_color_id": "6"},
+    {"id": "other", "color": "#6b7280", "google_color_id": "8"}
+  ]
+}

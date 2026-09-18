@@ -1,0 +1,9 @@
+{
+  "note": "Fictional demo: monthly planning total is USD 18.00. Not real subscriptions.",
+  "subscriptions": [
+    {"id": "notes", "name": "Example Notes", "vendor": "Fictional", "category": "fixed", "amount_usd": 10, "cadence": "monthly", "status": "active", "project": "writing"},
+    {"id": "domain", "name": "Example Domain", "vendor": "Fictional", "category": "fixed", "amount_usd": 60, "cadence": "yearly", "status": "active", "project": "shared"},
+    {"id": "hosting", "name": "Example Hosting", "vendor": "Fictional", "category": "variable", "amount_usd": 3, "cadence": "usage", "status": "active", "project": "home-ops"}
+  ],
+  "cancelled": []
+}

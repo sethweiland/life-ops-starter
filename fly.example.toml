@@ -1,0 +1,23 @@
+# Set a unique app name before deployment.
+app = "replace-with-your-app-name"
+primary_region = "iad"
+
+[build]
+
+# Fly terminates TLS and supplies X-Forwarded-Proto. The app still verifies login.
+# Import the generated authentication settings as secrets before starting it.
+[env]
+  LIFE_OPS_PROXY_HOPS = "1"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

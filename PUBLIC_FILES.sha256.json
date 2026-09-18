@@ -1,0 +1,453 @@
+{
+  "algorithm": "sha256",
+  "files": [
+    {
+      "path": ".dockerignore",
+      "digest": "dfb7abdab2692bed970d93ca3d0d5fcf63377a6b249b6eda3c8b8010b5074cc6"
+    },
+    {
+      "path": ".env.example",
+      "digest": "aa9fef29207ebd1941daf918e3ba6b8e8b887d480eed013bc150b4629dd930fb"
+    },
+    {
+      "path": ".github/dependabot.yml",
+      "digest": "bc355a83c5c92f0807e30e5656b93097fd9ec51d344887bc78de1a3d5c46ebaa"
+    },
+    {
+      "path": ".github/workflows/codeql.yml",
+      "digest": "91feaa39025bc73270bc679b301d14588225bad2f8c8c44326b0a0a314979472"
+    },
+    {
+      "path": ".github/workflows/security.yml",
+      "digest": "7f96f7535811a19eb89a3cba1295e94969690fb21cf4bbe54c71abc175d6762a"
+    },
+    {
+      "path": ".github/workflows/test.yml",
+      "digest": "5256db0060030ea4b2cd3e2561e1188e18c11e3006115c2f46fbbb9564225808"
+    },
+    {
+      "path": ".gitignore",
+      "digest": "9f88fb1f076d572e639a989350a91ca68d35123122edec129375814ca56ba672"
+    },
+    {
+      "path": "AGENTS.md",
+      "digest": "8d750f29e3bf3447c7300f807bd51d1e5014dac6e009a0e14f82be8dca1afc60"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "digest": "88f5879a0dc428082c4213e28df6e40573b5008e518173750fa16a9257272cf0"
+    },
+    {
+      "path": "Dockerfile",
+      "digest": "c1ea4fef169b691ef718d93ca1b826cfae64d79187560f6416135b5c4b79783e"
+    },
+    {
+      "path": "LICENSE",
+      "digest": "27a0018aac8ada530ae948194eee5390bd143e132d0e47d8727614bef3cd3c0d"
+    },
+    {
+      "path": "README.md",
+      "digest": "a5aa522de4d9752865bce3916c6a2dce9e2287e4e5fee33cd5c558097521476e"
+    },
+    {
+      "path": "SECURITY.md",
+      "digest": "407e28c27004894e41fb31b818876c8de3946d07a7bb2b8f3a99210fdfd0f6e9"
+    },
+    {
+      "path": "config/tenant.example.yaml",
+      "digest": "ebdd9d6f8b1526ea8f17f73ec26f8682b94ff2a89db811e7fa8c2da70dc2962a"
+    },
+    {
+      "path": "docs/attribution.md",
+      "digest": "5b9ec0ca6969d0964ac1f73ccf6864a5e3803f79d342aee144bdf830daa162f5"
+    },
+    {
+      "path": "docs/customization.md",
+      "digest": "4b81f55cd91d6dd10ba416efa6cae130bebc7f36533521ed606f7c9b02def58f"
+    },
+    {
+      "path": "docs/life-ops.md",
+      "digest": "3ec83b71e1d8363b3be35ab0b8cf0793a47d05a0675b4da3e1e485fabcac1f11"
+    },
+    {
+      "path": "docs/migration.md",
+      "digest": "0c99d9f3eab2379cd27df6417905d0a2a6236b74c1b429f06dd9465a15a425ac"
+    },
+    {
+      "path": "docs/onboarding/authentication.md",
+      "digest": "e16fc99de724d42069d9314d3a4a0e31ac349c162ceb971395dcd7989e95f41f"
+    },
+    {
+      "path": "docs/onboarding/connections.md",
+      "digest": "2c3242f90361afe4cd26d2dee3348cec0ea4d16df8463df490cd209fba93699f"
+    },
+    {
+      "path": "docs/onboarding/secrets.md",
+      "digest": "4c4dd1cfe1695875afee22ad4376513126724648300d095f645c733b9c649bf1"
+    },
+    {
+      "path": "docs/onboarding/setup-checklist.example.md",
+      "digest": "1ae3e3bd74adb214dae6f58bdffae083a74e54786770823138bf4284f1269ea0"
+    },
+    {
+      "path": "docs/onboarding/spend.md",
+      "digest": "e49da653352ab4fa3a64edaf2cae42be0ae1b6db295366c7036c5c5a0d9dbc7b"
+    },
+    {
+      "path": "docs/onboarding/start-here.md",
+      "digest": "207ae79aab193c147ab6a439af799989afb78b211a69ed8340ec920fd4ee2514"
+    },
+    {
+      "path": "docs/onboarding/troubleshooting.md",
+      "digest": "bccc93d679d621f99c7520ff498a88b18b7a01bf6b36bd2add9c9d2c818a3005"
+    },
+    {
+      "path": "docs/onboarding/weather.md",
+      "digest": "d42e4d2d265d155efe87c4a0a4cfa30b54be37faef1c86780c038d11a00b7c4a"
+    },
+    {
+      "path": "docs/primitives.md",
+      "digest": "d13fa335d7f00b41f6c1ad7f3adfcac1260f5d213d7a590b883b011777ef3893"
+    },
+    {
+      "path": "docs/releasing.md",
+      "digest": "8137cbf14babe6be9ef624d4884dd5bdeab7b05f2b7188ec76bfc1b23477fc98"
+    },
+    {
+      "path": "docs/roadmap.md",
+      "digest": "2601677163fcc8de7e6921bf6a48fa82a8482e60ff74cd1a4c373b2ccc2b487e"
+    },
+    {
+      "path": "examples/README.md",
+      "digest": "279d9784b151b71b4ecf9f1af02be7a9127c2ab251abfaf47f6d91f85246f27e"
+    },
+    {
+      "path": "examples/routines.json",
+      "digest": "a2c98fd4740a8bb29e5ad13f64939bcabb7069507365c9eace9b1266a805e6d3"
+    },
+    {
+      "path": "examples/tech-spend.json",
+      "digest": "1f5c271b15a98230b5d67c4eca427aaa9da609ae38b1d23984504c0ef9898cce"
+    },
+    {
+      "path": "examples/theme-forest.css",
+      "digest": "05b4df63eb978563b7c871daec0a0820a360643403b8504c8dff148c58457dd8"
+    },
+    {
+      "path": "fly.example.toml",
+      "digest": "88290498fe7cb6b18593791f9b150ca519d527811d578284135de97d7a889282"
+    },
+    {
+      "path": "pytest.ini",
+      "digest": "871fda959294cf43e4777761b0bcec6fed7842be972c8d44e162796e2e042a4b"
+    },
+    {
+      "path": "requirements-dev.in",
+      "digest": "61cbb9b44c56b556cba632a41200120f200f13b34e5fdabc718a42dbb4fd5a12"
+    },
+    {
+      "path": "requirements-dev.txt",
+      "digest": "ba579d05af6dfdf90225fab877b72633f9aeac6645cca7836cbf92ff1f83d53f"
+    },
+    {
+      "path": "requirements.in",
+      "digest": "64f6288f26a886e4dc7d4a6e510b3304683e7b2fff64a08fdb68ae724547222d"
+    },
+    {
+      "path": "requirements.txt",
+      "digest": "4c1295dea4688618c90d439b96f97277c10e7ea2906dc248f9bda5d3cd430a8f"
+    },
+    {
+      "path": "scripts/check_setup.py",
+      "digest": "0992d7569f51b73a4dbfb4d8d06f58acb470032b4285dc99dcca3aa4690006e5"
+    },
+    {
+      "path": "scripts/export_public.py",
+      "digest": "bb58ed2049c3ea6cd2a5bb6174964e721490a1626650545ac9f23fd51b58530c"
+    },
+    {
+      "path": "scripts/public-files.txt",
+      "digest": "95c48cd28f1580a896a44a24bb466141f0ef3477c4435a160e7dbd83ca30dd4f"
+    },
+    {
+      "path": "scripts/setup_auth.py",
+      "digest": "db0430303d61620dcd54130bed34b995c0d4c3117c4e0feb1f4de06bf7f2d736"
+    },
+    {
+      "path": "src/__init__.py",
+      "digest": "2108f4165a674ac97485c0a8418f4a34cfd16c72a51e8a23552aa1181be48a31"
+    },
+    {
+      "path": "src/core/__init__.py",
+      "digest": "081094403fd5fd6ff15aa0810f9a5124cecd9551e455a8fa4db125d96daa9a52"
+    },
+    {
+      "path": "src/core/auth_config.py",
+      "digest": "8024b4d1a285243b145f214444ff8b475878f9d033ab806a7a4d353a3924b227"
+    },
+    {
+      "path": "src/core/aws_costs.py",
+      "digest": "d5fd4e97c2fd34c9431cca44fce544913fe4bc4a2d3b0dff4e89e4458063fe94"
+    },
+    {
+      "path": "src/core/calendar.py",
+      "digest": "d8e623d25addf08b7ce45bded0962c4b4c22929525974d4f62559c694898524b"
+    },
+    {
+      "path": "src/core/grok_bot.py",
+      "digest": "47195e281b2c69c46435e95d86d2a55ae870963dc9b957e24a875a009f1cfce6"
+    },
+    {
+      "path": "src/core/project_board.py",
+      "digest": "56797bcca89c44fc3a747cdddd74e91917e68fc41cd9cadbaea27a5107fcb725"
+    },
+    {
+      "path": "src/core/projects.py",
+      "digest": "ab7310830fdecf97947d48473ce00a14d83483e9deb8521dca79479dd8f14a2f"
+    },
+    {
+      "path": "src/core/s3_store.py",
+      "digest": "0ed8001870a9c04ec28e8fb3b14b415c9e88b0084aafa907f3a5bb3cd221615c"
+    },
+    {
+      "path": "src/core/secrets.py",
+      "digest": "bbd61acd44eb093a05f104dcc3f49aab131ec944fde02abe68d5f69b455e5cea"
+    },
+    {
+      "path": "src/core/secrets_backend.py",
+      "digest": "274bf85acef3dde58570eabf8af6398accde614cbaae420d97df1d11335f96e2"
+    },
+    {
+      "path": "src/core/tech_spend.py",
+      "digest": "23ab4b9589457a17c894437fdd691ea69ce204f9d67d1bcfcc3731e2e79db1ac"
+    },
+    {
+      "path": "src/core/tenant.py",
+      "digest": "bb7c7d9df5da61c56a64cef617412d6bd5f08675fe873811242a1de8bfc918b5"
+    },
+    {
+      "path": "src/core/token_tracker.py",
+      "digest": "8a2b113c4a2419e3956242234c381d21572b3ed4789270a7e7b384660a2c624c"
+    },
+    {
+      "path": "src/core/urls.py",
+      "digest": "f02b6e1d779bb20f845d8d6689c2fee008e672fe1503b1a144b8bbfb2f3403d9"
+    },
+    {
+      "path": "src/core/weather.py",
+      "digest": "c29e951845fbe8d5cdcfb5be49f65108e652a96d00c2c89b82844fe6571fd032"
+    },
+    {
+      "path": "src/core/x_activity.py",
+      "digest": "dfe80a81599eae602cc8b0163d7db9f10a961cbf54db4cd985493fa0a31cbe50"
+    },
+    {
+      "path": "tests/__init__.py",
+      "digest": "71a9ddc53596eac35dd979adcb282dbe2ae05a07d35e8655ca0222a430443838"
+    },
+    {
+      "path": "tests/bootstrap.py",
+      "digest": "71a9ddc53596eac35dd979adcb282dbe2ae05a07d35e8655ca0222a430443838"
+    },
+    {
+      "path": "tests/fakes.py",
+      "digest": "258e1d752c86df10afd90c1b16a01a32e7a3918fc552363ee6ac169d22fee46b"
+    },
+    {
+      "path": "tests/fixtures/demo_tenant.yaml",
+      "digest": "8c42a4f6f7ef390ecee7ef3bc0793a91e18679484fa242fb2a8d2af8989702ae"
+    },
+    {
+      "path": "tests/fixtures/team-logos.json",
+      "digest": "af5d29fdcdbcbbec01027022894f1cb2d1143d2fe87ae12e5fd344eeb98e6539"
+    },
+    {
+      "path": "tests/fixtures/tech_spend.json",
+      "digest": "f7a9233865a26d155f7f0be78117a49298b841513ffe8726f7a6bbf792c155f2"
+    },
+    {
+      "path": "tests/test_app_isolation.py",
+      "digest": "282dd7a99675733c510dd7442fa7e052952ad8cb463f9fdb88fd9c39eeea0a6b"
+    },
+    {
+      "path": "tests/test_calendar.py",
+      "digest": "bdd71d0bac7e7df9bbded2eac37ea83c88beef863805fb8a7f2c795ee04941af"
+    },
+    {
+      "path": "tests/test_check_setup.py",
+      "digest": "86c530b057bf28fa3d62ffb0a166115b5ca8b61108c32ccf4df880b4cf006430"
+    },
+    {
+      "path": "tests/test_grok_bot.py",
+      "digest": "ac5f1a3b0341cb117bde5882d0079e0a3721ebee231efcaaf15f2bcf64affc0b"
+    },
+    {
+      "path": "tests/test_nav_folders.py",
+      "digest": "92c2ec04ec3c95d887605aaf5b0bf893fbbd36545c48e2b518fd50bbfddf7d1e"
+    },
+    {
+      "path": "tests/test_ops_ia.py",
+      "digest": "c268c341d2689ea8e99451759fedf314d53aa62c668bfdc28160cb001a4076ec"
+    },
+    {
+      "path": "tests/test_private_defaults.py",
+      "digest": "e43a88487f8d543647cbf532da3ca98a38e1ee76cf7f2144126e15819d075c19"
+    },
+    {
+      "path": "tests/test_project_board.py",
+      "digest": "44090ad874f1ea7eab992d6e23b6a8d00317c01571767655f34eb92b89781e21"
+    },
+    {
+      "path": "tests/test_public_export.py",
+      "digest": "b4259a05076f7c59dc9f35a2a89b866fbbbdc4abe616aa0dbc7092d4d19ca321"
+    },
+    {
+      "path": "tests/test_s3_store.py",
+      "digest": "5021d0a7bf89d49d70bd3a235c9e0151134c4a6225ede7e855a4ed21d7384379"
+    },
+    {
+      "path": "tests/test_security.py",
+      "digest": "3b9a75a6423ea9b84a41fd1ab0a0fcc3aee7b03e0aeaf5b0e78dab9bd3ac54a0"
+    },
+    {
+      "path": "tests/test_spend_connections.py",
+      "digest": "037345fac3a39d2d65ced00cbc4fa86a6e9383869370e42691d13fe510ead6d4"
+    },
+    {
+      "path": "tests/test_spend_projects.py",
+      "digest": "d5b480f66682f6e128cbe9900c2f17c5831631e65d1f2bec0e68f9d49dc937ff"
+    },
+    {
+      "path": "tests/test_spend_usage.py",
+      "digest": "8ae62db08d67fd0f15d1bad9d0ce95ef6f9dbcfa0637ce54570f585623168930"
+    },
+    {
+      "path": "tests/test_tech_spend.py",
+      "digest": "1554c29fe3132525c26d3e993128d220f96f3a1c20e9cf4f14636b4ceef27ef9"
+    },
+    {
+      "path": "tests/test_tenant.py",
+      "digest": "97e0a74c7da753b1b7883d97f848f79a01e7404c5d57077cbd931f4d320256cf"
+    },
+    {
+      "path": "tests/test_token_tracker.py",
+      "digest": "a8ae6239bbffe163d19cdeb415b0820bbc030adcae5451bf302974d8978ef31f"
+    },
+    {
+      "path": "tests/test_url_safety.py",
+      "digest": "d3ca83295f2b107a7bdd2f1bbbebf7028cdc6d1f9ef838de039ff274ead5d90d"
+    },
+    {
+      "path": "tests/test_weather.py",
+      "digest": "7376e2bc60f4dc91fa94b01e810aaf56633b45935b07034ac092fe7de5f913b9"
+    },
+    {
+      "path": "tests/test_performance.py",
+      "digest": "76fa5bb2044628f8bce347e021cf3643c66e6c2278dc17afec1919846e03667b"
+    },
+    {
+      "path": "tests/test_x_activity.py",
+      "digest": "b43c8ed73ac811d1d6ac1d5ff99bd478cdfebff3cdac94ef64b168029e594a5f"
+    },
+    {
+      "path": "web/__init__.py",
+      "digest": "e377f1f142266d393a2fabbddb8c09c54fec975ee22d9ed45ac57697bffdaf12"
+    },
+    {
+      "path": "web/blueprints/__init__.py",
+      "digest": "a7f9c068ae0130793c5561950aded6b935bee4f35206cd1731ef4622df55a8cd"
+    },
+    {
+      "path": "web/blueprints/grok_bot.py",
+      "digest": "4c374002d758df8bb980691e3a1d0fe50d7a0259923d70051a2b24e50dfd18dc"
+    },
+    {
+      "path": "web/blueprints/home.py",
+      "digest": "898cf6ec204158fd56d8879433fd9e8de4354e45979d5232d552d33adf7981f3"
+    },
+    {
+      "path": "web/blueprints/projects.py",
+      "digest": "fb2cb721e0b4794ca5cfb4089bd7eda16dbabeeb11f2751a18aa79f381ee8b90"
+    },
+    {
+      "path": "web/blueprints/spend.py",
+      "digest": "15d17c3449e38459e90719289ac6f4523ccd17cec89e160d8b05637f503ea5a7"
+    },
+    {
+      "path": "web/blueprints/x_activity.py",
+      "digest": "b25bcb04edae115a90aef619e58aa60697b69331ce048c9e8e46d1407f885f21"
+    },
+    {
+      "path": "web/context.py",
+      "digest": "400d8075375a4312050c343872898fd36682fae0babc6a2c6b25a83385d28c8c"
+    },
+    {
+      "path": "web/run.py",
+      "digest": "6e5e89234e7fc0be69ce72289766f64eb0629dc4a0e525b66acf0e3adcd1e84e"
+    },
+    {
+      "path": "web/performance.py",
+      "digest": "8f1d0f980b861a878d8903f3355f687debd755e769b0441cccf8b229c2e8c3ec"
+    },
+    {
+      "path": "web/security.py",
+      "digest": "61745c21691455d9c5ee6a112963676f357e9ec98c4385bdaa164df419fe774d"
+    },
+    {
+      "path": "web/static/app.js",
+      "digest": "da092887729316358a1a6379ee90d1fb5c7ed0e33d74da1492ef0e286dc956f7"
+    },
+    {
+      "path": "web/static/projects.js",
+      "digest": "3a6b44f77f716acfa8a5644d9e8806b71cb4330661dcf4e02a1347158aa2e2cd"
+    },
+    {
+      "path": "web/static/style.css",
+      "digest": "e616a3bf36fafcb866bab0525a80b8503324da49908d8215aa18c4d9e014e53b"
+    },
+    {
+      "path": "web/static/x-activity.js",
+      "digest": "8e3dd7d117fe1d0c67cd8db960ad05d061292bdd1d009eb0a5789f76b902e717"
+    },
+    {
+      "path": "web/templates/auth/error.html",
+      "digest": "e229b3fa33710b4877e58626114d42de372208a82376e31d67c4ea73030b2dfd"
+    },
+    {
+      "path": "web/templates/auth/login.html",
+      "digest": "c1b8bdb6787020bddf36a5015e022af8ee4a8456ec4235e02ca1af6b09474e01"
+    },
+    {
+      "path": "web/templates/base.html",
+      "digest": "56e994dee72d6a49196db606d6c376f2b1c9d51fc2bc2cdf3f7fd3eb74c432de"
+    },
+    {
+      "path": "web/templates/grok_bot/index.html",
+      "digest": "4e8c8e7ebf5ecd96f6eb1211e77c71c2953d7ffb9d16eba6179647a6b7ab2146"
+    },
+    {
+      "path": "web/templates/home/index.html",
+      "digest": "7f01466e66cadc8087054b4c8cdf013645618eec8448ac0cadd0cba994d605ea"
+    },
+    {
+      "path": "web/templates/home/weather.html",
+      "digest": "8f1e95427ecf5ad93d8bb02037313afb8dc994829f779b247ca0e281ed0d9bf6"
+    },
+    {
+      "path": "web/templates/projects/index.html",
+      "digest": "283821519d7a9578c7c93cf825afebb74111c88caccf47aaf04717ffa4c0b94d"
+    },
+    {
+      "path": "web/templates/spend/index.html",
+      "digest": "086d5aee97a6f66af87d0707738a954b79b6c8560f27b3ca235d8d408ca650b6"
+    },
+    {
+      "path": "web/templates/x_activity/index.html",
+      "digest": "45bea379bee77db118544783747c1c25a3e7346dfa2c5e0eb62545e022839843"
+    },
+    {
+      "path": "wsgi.py",
+      "digest": "bd5dc110512e213e281badfa096a5238873a20c772986786cc401f183a7b4221"
+    }
+  ]
+}

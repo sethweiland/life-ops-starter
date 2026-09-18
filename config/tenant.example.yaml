@@ -1,0 +1,82 @@
+# Starter configuration — copy to config/tenant.yaml and add your projects.
+# config/tenant.yaml is gitignored. On Fly, upload yours to S3 ops/tenant.yaml.
+# Safe to commit. Never put API keys, tokens, passwords, or ARNs here.
+# folders: are Folders-menu nav only — not a sixth primitive.
+
+human:
+  name: Your Name
+  timezone: America/New_York
+  handle: ""
+
+site:
+  title: Ops
+  domain: ops.example.com
+
+modules:
+  projects: true
+  spend: true
+  x: false
+  grok_bot: false
+  memes: false
+  calendar: true
+  weather: false          # Optional Home weather/clothing cues; set location privately in .env.
+
+calendar:
+  enabled: true           # Home widgets. Empty snapshot is fine. Never put ICS URLs here.
+
+secrets:
+  backend: env
+
+# Add names only for agents you actually use; no agent account is required.
+agents: []
+
+defaults:
+  usage_project: home-ops
+
+# Bookmarks-style Folders menu. Not a sixth primitive — nav only.
+# Leave meme / X / Grok Bot links out when those modules are off.
+folders:
+  - id: life
+    name: Life
+    project_ids: [home-ops, writing]
+  - id: work
+    name: Work
+    project_ids: [side-project]
+
+projects:
+  - id: home-ops
+    name: Home Ops
+    lane: active
+    owner_agent: null
+    color: "#2563eb"
+    description: Personal life-ops shell
+    links:
+      repo: ""
+      prod: ""
+    summary: Self-hosted life-ops board
+    last_done: null
+    next_steps: null
+  - id: side-project
+    name: Side Project
+    lane: idea
+    owner_agent: null
+    color: "#059669"
+    description: ""
+    links:
+      repo: ""
+      prod: ""
+    summary: ""
+    last_done: null
+    next_steps: null
+  - id: writing
+    name: Writing
+    lane: parked
+    owner_agent: null
+    color: "#d97706"
+    description: ""
+    links:
+      repo: ""
+      prod: ""
+    summary: ""
+    last_done: null
+    next_steps: null

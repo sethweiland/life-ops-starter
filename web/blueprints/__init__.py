@@ -1,0 +1,1 @@
+"""Life-ops Flask blueprints."""

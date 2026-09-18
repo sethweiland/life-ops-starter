@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Home · Ops{% endblock %}
+
+{% block content %}
+{% macro cal_event_row(event) -%}
+                        <li data-event-id="{{ event.id }}"{% if event.category %} data-cal-category="{{ event.category.id }}" style="--ops-cal-cat: {{ event.category.color }}"{% endif %}>
+                            <span class="ops-cal-when">{{ event.when_label }}</span>
+                            {% for crest in event.crests or [] %}
+                            {% if crest.logo_url %}
+                            <img class="ops-cal-crest" src="{{ crest.logo_url }}" alt="" width="16" height="16" loading="lazy" decoding="async" data-cal-crest="{{ crest.id }}">
+                            {% endif %}
+                            {% endfor %}
+                            {% if event.url %}
+                            <a href="{{ event.url }}" target="_blank" rel="noopener">{{ event.title }}</a>
+                            {% else %}
+                            <span class="ops-cal-title">{{ event.title }}</span>
+                            {% endif %}
+                            {% if event.location %}
+                            <span class="ops-cal-location">{{ event.location }}</span>
+                            {% endif %}
+                        </li>
+{%- endmacro %}
+<div class="ops-home">
+    <h1>Home</h1>
+    <p class="ops-lede">Life overview. Your plans, decisions, and the day ahead.</p>
+
+    <section class="ops-waiting" aria-labelledby="waiting-heading">
+        <h2 id="waiting-heading">Waiting on you</h2>
+        {% if waiting_projects or pending_x_count %}
+        <ul class="ops-waiting-list">
+            {% for project in waiting_projects %}
+            <li>
+                <a href="{{ url_for('projects.index') }}">{{ project.name }}</a>
+                {% if project.next_steps %}
+                <span class="ops-waiting-note">{{ project.next_steps }}</span>
+                {% endif %}
+            </li>
+            {% endfor %}
+            {% if pending_x_count %}
+            <li>
+                <a href="{{ url_for('x_activity.index') }}">{{ pending_x_count }} pending X draft{% if pending_x_count != 1 %}s{% endif %}</a>
+            </li>
+            {% endif %}
+        </ul>
+        {% else %}
+        <p>Nothing queued. Project blockers and X drafts will show up here.</p>
+        {% endif %}
+    </section>
+
+    {% if weather_enabled %}
+    <section class="ops-weather" aria-labelledby="weather-heading" data-weather-url="{{ url_for('home.weather') }}">
+        <h2 id="weather-heading">Before you head out</h2>
+        <div data-weather-content aria-live="polite" aria-busy="true">
+            <p class="ops-weather-meta">Loading weather and clothing cues…</p>
+        </div>
+        <noscript><p>Open <a href="{{ url_for('home.weather') }}">the weather summary</a> to load your forecast.</p></noscript>
+    </section>
+    {% endif %}
+
+    {% if calendar %}
+    <div class="ops-cal-grid">
+        <section class="ops-cal" aria-labelledby="cal-week-heading" data-calendar="this-week">
+            <h2 id="cal-week-heading">This week</h2>
+            {% if not calendar.has_snapshot %}
+            <p class="ops-cal-empty">{{ calendar.empty_message or "No calendar snapshot yet." }}</p>
+            {% elif calendar.this_week_days %}
+            <div class="ops-cal-week">
+                {% for day in calendar.this_week_days %}
+                <section class="ops-cal-day{% if day.is_today %} is-today{% endif %}" data-cal-day="{{ day.date }}">
+                    <h3 class="ops-cal-day-h">{{ day.label }}</h3>
+                    {% if day.events %}
+                    <ul class="ops-cal-list">
+                        {% for event in day.events %}
+                        {{ cal_event_row(event) }}
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                </section>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="ops-cal-empty">Nothing this week.</p>
+            {% endif %}
+        </section>
+        <section class="ops-cal" aria-labelledby="cal-horizon-heading" data-calendar="horizon">
+            <h2 id="cal-horizon-heading">On the horizon</h2>
+            {% if not calendar.has_snapshot %}
+            <p class="ops-cal-empty">{{ calendar.empty_message or "No calendar snapshot yet." }}</p>
+            {% elif calendar.horizon_days %}
+            <div class="ops-cal-agenda">
+                {% for day in calendar.horizon_days %}
+                <section class="ops-cal-agenda-day" data-cal-day="{{ day.date }}">
+                    <h3 class="ops-cal-day-h">{{ day.label }}</h3>
+                    <ul class="ops-cal-list">
+                        {% for event in day.events %}
+                        {{ cal_event_row(event) }}
+                        {% endfor %}
+                    </ul>
+                </section>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="ops-cal-empty">Nothing on the horizon.</p>
+            {% endif %}
+        </section>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

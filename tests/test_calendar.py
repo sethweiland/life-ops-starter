@@ -1,0 +1,1136 @@
+"""Calendar snapshot / ICS — Home This week vs horizon. No invented events."""
+
+from __future__ import annotations
+
+import json
+import tempfile
+import unittest
+from datetime import datetime
+from pathlib import Path
+from unittest.mock import patch
+from zoneinfo import ZoneInfo
+
+from flask import Blueprint, Flask
+
+import tests.bootstrap  # noqa: F401
+
+from src.core.calendar import (
+    EMPTY_SNAPSHOT_MESSAGE,
+    CalendarStore,
+    empty_team_logos,
+    horizon_bounds,
+    infer_event_category,
+    match_event_crests,
+    match_team_crest,
+    normalize_event,
+    normalize_snapshot,
+    normalize_team_logos,
+    parse_ics,
+    parse_matchup_sides,
+    present_location,
+    reset_calendar,
+    split_home_events,
+)
+from src.core.project_board import ProjectBoard, reset_project_board
+from src.core.s3_store import BucketLayout
+from src.core.tenant import load_tenant_from_path, reset_tenant
+from tests.fakes import MemoryS3Store
+from web.blueprints.home import bp as home_bp
+
+
+_ROOT = Path(__file__).resolve().parents[1]
+_WEB_ROOT = _ROOT / "web"
+_DEMO = Path(__file__).resolve().parent / "fixtures" / "demo_tenant.yaml"
+_TEAM_LOGOS = Path(__file__).resolve().parent / "fixtures" / "team-logos.json"
+ET = ZoneInfo("America/New_York")
+NOW = datetime(2026, 9, 12, 12, 0, tzinfo=ET)
+
+SNAPSHOT_EVENTS = [
+    {
+        "id": "past-standup",
+        "title": "Past standup",
+        "start": "2026-09-11T10:00:00-04:00",
+        "end": "2026-09-11T10:30:00-04:00",
+        "all_day": False,
+    },
+    {
+        "id": "saturday-dinner",
+        "title": "Saturday dinner",
+        "start": "2026-09-12T18:00:00-04:00",
+        "end": "2026-09-12T20:00:00-04:00",
+        "all_day": False,
+        "location": "Home",
+    },
+    {
+        "id": "sunday-hike",
+        "title": "Sunday hike",
+        "start": "2026-09-13",
+        "end": "2026-09-14",
+        "all_day": True,
+    },
+    {
+        "id": "next-friday",
+        "title": "Next Friday gap",
+        "start": "2026-09-18T09:00:00-04:00",
+        "end": "2026-09-18T10:00:00-04:00",
+        "all_day": False,
+    },
+    {
+        "id": "october-trip",
+        "title": "October trip",
+        "start": "2026-10-05T09:00:00-04:00",
+        "end": "2026-10-08T18:00:00-04:00",
+        "all_day": False,
+        "url": "https://example.com/trip",
+    },
+    {
+        "id": "far-away",
+        "title": "Far away",
+        "start": "2027-03-01T12:00:00-05:00",
+        "end": "2027-03-01T13:00:00-05:00",
+        "all_day": False,
+    },
+]
+
+
+def _team_logos_map() -> dict:
+    return normalize_team_logos(json.loads(_TEAM_LOGOS.read_text(encoding="utf-8")))
+
+
+def _nav_app() -> Flask:
+    app = Flask(
+        __name__,
+        template_folder=str(_WEB_ROOT / "templates"),
+        static_folder=str(_WEB_ROOT / "static"),
+    )
+    app.secret_key = "test"
+    for name, endpoint, path in (
+        ("projects", "index", "/projects/"),
+        ("spend", "index", "/spend/"),
+        ("x_activity", "index", "/x/"),
+        ("grok_bot", "index", "/grok-bot/"),
+        ("dashboard", "index", "/memes/"),
+        ("generate", "start", "/memes/generate/"),
+        ("video", "start", "/memes/video/"),
+        ("gallery", "index", "/memes/gallery/"),
+        ("daily_candidates", "index", "/memes/gallery/daily-candidates/"),
+        ("templates_review", "review_page", "/memes/templates/"),
+        ("discovery", "dashboard", "/memes/discovery/"),
+    ):
+        stub = Blueprint(name, name)
+        stub.add_url_rule(path, endpoint, lambda **_kwargs: "")
+        app.register_blueprint(stub)
+    app.register_blueprint(home_bp)
+    return app
+
+
+class NormalizeAndSplitTests(unittest.TestCase):
+    def test_normalize_drops_events_without_title_or_start(self):
+        self.assertIsNone(normalize_event({"id": "x", "start": "2026-09-12T12:00:00-04:00"}))
+        self.assertIsNone(normalize_event({"title": "Nope"}))
+        self.assertIsNone(normalize_snapshot(["not", "an", "object"]))
+
+    def test_split_hides_invented_and_out_of_window_events(self):
+        snapshot = normalize_snapshot(
+            {
+                "updated_at": "2026-09-12T00:00:00+00:00",
+                "timezone": "America/New_York",
+                "events": SNAPSHOT_EVENTS,
+            }
+        )
+        lists = split_home_events(snapshot, now=NOW, timezone_name="America/New_York")
+        week_titles = [event["title"] for event in lists["this_week"]]
+        horizon_titles = [event["title"] for event in lists["horizon"]]
+        self.assertEqual(week_titles, ["Saturday dinner", "Sunday hike"])
+        self.assertEqual(horizon_titles, ["Next Friday gap", "October trip"])
+        hidden = " ".join(week_titles + horizon_titles)
+        self.assertNotIn("Past standup", hidden)
+        self.assertNotIn("Far away", hidden)
+        self.assertNotIn("Invented Birthday", hidden)
+        self.assertNotIn("Team standup", hidden)
+
+    def test_no_snapshot_is_empty_state_not_invented_events(self):
+        lists = split_home_events(None, now=NOW, timezone_name="America/New_York")
+        self.assertFalse(lists["has_snapshot"])
+        self.assertEqual(lists["this_week"], [])
+        self.assertEqual(lists["horizon"], [])
+        self.assertEqual(lists["empty_message"], EMPTY_SNAPSHOT_MESSAGE)
+
+    def test_empty_snapshot_has_no_invented_events(self):
+        snapshot = normalize_snapshot(
+            {"updated_at": "2026-09-12T00:00:00+00:00", "timezone": "America/New_York", "events": []}
+        )
+        lists = split_home_events(snapshot, now=NOW)
+        self.assertTrue(lists["has_snapshot"])
+        self.assertEqual(lists["this_week"], [])
+        self.assertEqual(lists["horizon"], [])
+        self.assertIsNone(lists["empty_message"])
+
+    def test_horizon_starts_monday_after_this_week(self):
+        start, _end = horizon_bounds(NOW, ET)
+        self.assertEqual(start.date().isoformat(), "2026-09-14")
+        self.assertEqual(start.weekday(), 0)
+        sunday_end = datetime(2026, 9, 13, 23, 59, 59, tzinfo=ET)
+        self.assertGreater(start, sunday_end)
+        monday_now = datetime(2026, 9, 14, 9, 0, tzinfo=ET)
+        monday_start, _monday_end = horizon_bounds(monday_now, ET)
+        self.assertEqual(monday_start.date().isoformat(), "2026-09-21")
+
+    def test_split_groups_remaining_week_days_and_horizon_dates(self):
+        snapshot = normalize_snapshot(
+            {
+                "updated_at": "2026-09-12T00:00:00+00:00",
+                "timezone": "America/New_York",
+                "events": SNAPSHOT_EVENTS,
+            }
+        )
+        lists = split_home_events(snapshot, now=NOW, timezone_name="America/New_York")
+        self.assertEqual([day["label"] for day in lists["this_week_days"]], ["Sat 12", "Sun 13"])
+        self.assertEqual([day["date"] for day in lists["this_week_days"]], ["2026-09-12", "2026-09-13"])
+        self.assertTrue(lists["this_week_days"][0]["is_today"])
+        self.assertFalse(lists["this_week_days"][1]["is_today"])
+        self.assertEqual(
+            [event["title"] for event in lists["this_week_days"][0]["events"]],
+            ["Saturday dinner"],
+        )
+        self.assertEqual(lists["this_week_days"][0]["events"][0]["when_label"], "6–8 PM")
+        self.assertEqual(
+            [event["title"] for event in lists["this_week_days"][1]["events"]],
+            ["Sunday hike"],
+        )
+        self.assertEqual(lists["this_week_days"][1]["events"][0]["when_label"], "All day")
+        self.assertEqual(
+            [(day["date"], day["label"]) for day in lists["horizon_days"]],
+            [("2026-09-18", "Fri Sep 18"), ("2026-10-05", "Mon Oct 5")],
+        )
+        self.assertEqual(lists["horizon_days"][0]["events"][0]["when_label"], "9–10 AM")
+        self.assertEqual(lists["horizon_days"][1]["events"][0]["when_label"], "9 AM – Thu Oct 8")
+        self.assertEqual(lists["this_week_label"], "")
+        self.assertEqual(lists["horizon_label"], "")
+
+    def test_week_keeps_empty_days_so_the_week_is_readable(self):
+        monday = datetime(2026, 9, 7, 12, 0, tzinfo=ET)
+        snapshot = normalize_snapshot(
+            {
+                "updated_at": "2026-09-07T00:00:00+00:00",
+                "timezone": "America/New_York",
+                "events": SNAPSHOT_EVENTS,
+            }
+        )
+        lists = split_home_events(snapshot, now=monday, timezone_name="America/New_York")
+        labels = [day["label"] for day in lists["this_week_days"]]
+        self.assertEqual(labels, ["Mon 7", "Tue 8", "Wed 9", "Thu 10", "Fri 11", "Sat 12", "Sun 13"])
+        empty = [day["label"] for day in lists["this_week_days"] if not day["events"]]
+        self.assertEqual(empty, ["Mon 7", "Tue 8", "Wed 9", "Thu 10"])
+        friday = next(day for day in lists["this_week_days"] if day["date"] == "2026-09-11")
+        self.assertEqual([event["title"] for event in friday["events"]], ["Past standup"])
+
+    def test_present_location_quiets_streets_and_title_repeats(self):
+        self.assertIsNone(present_location("EWR → BTV", "EWR → BTV"))
+        self.assertIsNone(present_location("Flight EWR → BTV", "EWR -> BTV"))
+        self.assertIsNone(present_location("Dentist", "America/New_York"))
+        self.assertEqual(present_location("Saturday dinner", "Home"), "Home")
+        self.assertEqual(
+            present_location("Dentist", "123 Main St, Apt 4B, Brooklyn, NY 11201"),
+            "Brooklyn",
+        )
+        self.assertEqual(
+            present_location("Pizza", "Lucali, 456 5th Ave, New York, NY 10001"),
+            "Lucali",
+        )
+        self.assertIsNone(present_location("Stay in", "123 Main Street, Apt 4B"))
+
+    def test_title_match_attaches_crest_without_inventing_events(self):
+        logos = _team_logos_map()
+        self.assertEqual(logos["match"][0]["id"], "northbridge")
+        self.assertEqual(match_team_crest("Northbridge vs Pinecrest", logos)["id"], "northbridge")
+        self.assertEqual(
+            match_team_crest("Northbridge vs Pinecrest", logos)["logo_url"],
+            "https://assets.example.com/northbridge.png",
+        )
+        self.assertEqual(match_team_crest("Harbor vs Riverton", logos)["id"], "harbor")
+        self.assertEqual(match_team_crest("northbridge bears", logos)["id"], "northbridge")
+        self.assertEqual(match_team_crest("🏈 Northbridge vs Pinecrest", logos)["id"], "northbridge")
+        self.assertEqual(match_team_crest("⚽ Harbor vs Riverton", logos)["id"], "harbor")
+        self.assertEqual(match_team_crest("🏈\u00a0Northbridge Bears", logos)["id"], "northbridge")
+        self.assertEqual(match_team_crest("Premier League: Harbor (A)", logos)["id"], "harbor")
+        self.assertIsNone(match_team_crest("Saturday dinner", logos))
+        self.assertIsNone(match_team_crest("Dentist", logos))
+        self.assertIsNone(match_team_crest("🏈", logos))
+        self.assertIsNone(match_team_crest("⚽", logos))
+        self.assertIsNone(match_team_crest("Pinecrest vs Hillford", logos))
+        self.assertIsNone(match_team_crest("Northbridge vs Pinecrest", None))
+        self.assertIsNone(match_team_crest("Northbridge vs Pinecrest", empty_team_logos()))
+
+        snapshot = normalize_snapshot(
+            {
+                "updated_at": "2026-09-12T00:00:00+00:00",
+                "timezone": "America/New_York",
+                "events": SNAPSHOT_EVENTS
+                + [
+                    {
+                        "id": "northbridge-game",
+                        "title": "Northbridge vs Pinecrest",
+                        "start": "2026-09-12T19:30:00-04:00",
+                        "end": "2026-09-12T22:30:00-04:00",
+                        "all_day": False,
+                    },
+                    {
+                        "id": "harbor-game",
+                        "title": "Harbor vs Riverton",
+                        "start": "2026-09-20T11:00:00-04:00",
+                        "end": "2026-09-20T13:00:00-04:00",
+                        "all_day": False,
+                    },
+                ],
+            }
+        )
+        lists = split_home_events(
+            snapshot, now=NOW, timezone_name="America/New_York", team_logos=logos
+        )
+        week_by_title = {event["title"]: event for event in lists["this_week"]}
+        horizon_by_title = {event["title"]: event for event in lists["horizon"]}
+        self.assertEqual(week_by_title["Northbridge vs Pinecrest"]["crest"]["id"], "northbridge")
+        self.assertIsNone(week_by_title["Saturday dinner"]["crest"])
+        self.assertEqual(horizon_by_title["Harbor vs Riverton"]["crest"]["id"], "harbor")
+        self.assertIsNone(horizon_by_title["October trip"]["crest"])
+        self.assertNotIn("Invented Birthday", week_by_title)
+        self.assertNotIn("Invented Birthday", horizon_by_title)
+
+        prefixed = normalize_snapshot(
+            {
+                "updated_at": "2026-09-12T00:00:00+00:00",
+                "timezone": "America/New_York",
+                "events": SNAPSHOT_EVENTS
+                + [
+                    {
+                        "id": "northbridge-game",
+                        "title": "🏈 Northbridge vs Pinecrest",
+                        "start": "2026-09-12T19:30:00-04:00",
+                        "end": "2026-09-12T22:30:00-04:00",
+                        "all_day": False,
+                    },
+                    {
+                        "id": "harbor-game",
+                        "title": "⚽ Harbor vs Riverton",
+                        "start": "2026-09-20T11:00:00-04:00",
+                        "end": "2026-09-20T13:00:00-04:00",
+                        "all_day": False,
+                    },
+                ],
+            }
+        )
+        prefixed_lists = split_home_events(
+            prefixed, now=NOW, timezone_name="America/New_York", team_logos=logos
+        )
+        self.assertEqual(
+            [event["title"] for event in prefixed_lists["this_week"]],
+            ["Saturday dinner", "🏈 Northbridge vs Pinecrest", "Sunday hike"],
+        )
+        self.assertEqual(
+            [event["title"] for event in prefixed_lists["horizon"]],
+            ["Next Friday gap", "⚽ Harbor vs Riverton", "October trip"],
+        )
+        week_prefixed = {event["title"]: event for event in prefixed_lists["this_week"]}
+        horizon_prefixed = {event["title"]: event for event in prefixed_lists["horizon"]}
+        self.assertEqual(week_prefixed["🏈 Northbridge vs Pinecrest"]["crest"]["id"], "northbridge")
+        self.assertEqual(horizon_prefixed["⚽ Harbor vs Riverton"]["crest"]["id"], "harbor")
+        self.assertIsNone(week_prefixed["Saturday dinner"]["crest"])
+        self.assertIsNone(horizon_prefixed["October trip"]["crest"])
+        shown = [event["title"] for event in prefixed_lists["this_week"] + prefixed_lists["horizon"]]
+        self.assertNotIn("Invented Birthday", shown)
+        self.assertEqual(len(prefixed["events"]), len(SNAPSHOT_EVENTS) + 2)
+
+    def test_missing_or_junk_team_logo_map_leaves_events_unchanged(self):
+        snapshot = normalize_snapshot(
+            {
+                "updated_at": "2026-09-12T00:00:00+00:00",
+                "timezone": "America/New_York",
+                "events": SNAPSHOT_EVENTS
+                + [
+                    {
+                        "id": "northbridge-game",
+                        "title": "Northbridge vs Pinecrest",
+                        "start": "2026-09-12T19:30:00-04:00",
+                        "end": "2026-09-12T22:30:00-04:00",
+                        "all_day": False,
+                    }
+                ],
+            }
+        )
+        for logos in (None, empty_team_logos(), ["not", "a", "map"], {"match": "nope"}):
+            lists = split_home_events(
+                snapshot, now=NOW, timezone_name="America/New_York", team_logos=logos
+            )
+            titles = [event["title"] for event in lists["this_week"]]
+            self.assertIn("Northbridge vs Pinecrest", titles)
+            self.assertIn("Saturday dinner", titles)
+            self.assertTrue(all(event["crest"] is None for event in lists["this_week"]))
+            self.assertTrue(all(event["crest"] is None for event in lists["horizon"]))
+        self.assertIsNone(normalize_team_logos(["not", "an", "object"]))
+        junk = normalize_team_logos({"match": "nope"})
+        self.assertEqual(junk["match"], [])
+        self.assertEqual(junk["teams"], [])
+        self.assertEqual(normalize_team_logos({"match": []})["match"], [])
+        self.assertEqual(normalize_team_logos({"match": []})["teams"], [])
+
+    def test_parse_matchup_sides_vs_at_against_v_dash(self):
+        logos = _team_logos_map()
+        self.assertEqual(parse_matchup_sides("Northbridge vs Eastfield", logos), ("Northbridge", "Eastfield"))
+        self.assertEqual(parse_matchup_sides("Northbridge @ Lakeside", logos), ("Northbridge", "Lakeside"))
+        self.assertEqual(
+            parse_matchup_sides("Harbor vs Westhaven…", logos),
+            ("Harbor", "Westhaven"),
+        )
+        self.assertEqual(
+            parse_matchup_sides("Harbor @ AFC Bayport…", logos),
+            ("Harbor", "AFC Bayport"),
+        )
+        self.assertEqual(
+            parse_matchup_sides("🏈 Northbridge vs Eastfield", logos),
+            ("Northbridge", "Eastfield"),
+        )
+        self.assertEqual(
+            parse_matchup_sides("⚽ Harbor vs Westhaven…", logos),
+            ("Harbor", "Westhaven"),
+        )
+        self.assertEqual(
+            parse_matchup_sides("Harbor against Westhaven", logos),
+            ("Harbor", "Westhaven"),
+        )
+        self.assertEqual(
+            parse_matchup_sides("Harbor v Westhaven", logos),
+            ("Harbor", "Westhaven"),
+        )
+        self.assertEqual(
+            parse_matchup_sides("Northbridge — Lakeside", logos),
+            ("Northbridge", "Lakeside"),
+        )
+        self.assertIsNone(parse_matchup_sides("Premier League: Harbor (A)", logos))
+        self.assertIsNone(parse_matchup_sides("Saturday dinner", logos))
+
+    def test_two_crests_when_both_teams_known(self):
+        logos = _team_logos_map()
+        self.assertEqual(logos["teams"][2]["id"], "eastfield")
+        northbridge_eastfield = match_event_crests("Northbridge vs Eastfield", logos)
+        self.assertEqual([row["id"] for row in northbridge_eastfield], ["northbridge", "eastfield"])
+        self.assertEqual(
+            northbridge_eastfield[1]["logo_url"],
+            "https://assets.example.com/team-2509.png",
+        )
+        self.assertEqual(
+            [row["id"] for row in match_event_crests("Northbridge @ Lakeside", logos)],
+            ["northbridge", "lakeside"],
+        )
+        self.assertEqual(
+            [row["id"] for row in match_event_crests("Harbor vs Westhaven…", logos)],
+            ["harbor", "westhaven"],
+        )
+        self.assertEqual(
+            [row["id"] for row in match_event_crests("Harbor @ AFC Bayport…", logos)],
+            ["harbor", "bayport"],
+        )
+        self.assertEqual(
+            [row["id"] for row in match_event_crests("🏈 Northbridge vs Eastfield", logos)],
+            ["northbridge", "eastfield"],
+        )
+        self.assertEqual(match_team_crest("Northbridge vs Eastfield", logos)["id"], "northbridge")
+
+        snapshot = normalize_snapshot(
+            {
+                "updated_at": "2026-09-12T00:00:00+00:00",
+                "timezone": "America/New_York",
+                "events": SNAPSHOT_EVENTS
+                + [
+                    {
+                        "id": "northbridge-eastfield",
+                        "title": "Northbridge vs Eastfield",
+                        "start": "2026-09-12T19:30:00-04:00",
+                        "end": "2026-09-12T22:30:00-04:00",
+                        "all_day": False,
+                    },
+                    {
+                        "id": "harbor-spurs",
+                        "title": "Harbor vs Westhaven…",
+                        "start": "2026-09-20T11:00:00-04:00",
+                        "end": "2026-09-20T13:00:00-04:00",
+                        "all_day": False,
+                    },
+                ],
+            }
+        )
+        lists = split_home_events(
+            snapshot, now=NOW, timezone_name="America/New_York", team_logos=logos
+        )
+        week = {event["title"]: event for event in lists["this_week"]}
+        horizon = {event["title"]: event for event in lists["horizon"]}
+        self.assertEqual(
+            [row["id"] for row in week["Northbridge vs Eastfield"]["crests"]],
+            ["northbridge", "eastfield"],
+        )
+        self.assertEqual(week["Northbridge vs Eastfield"]["crest"]["id"], "northbridge")
+        self.assertEqual(week["Northbridge vs Eastfield"]["category"]["id"], "sports")
+        self.assertEqual(
+            [row["id"] for row in horizon["Harbor vs Westhaven…"]["crests"]],
+            ["harbor", "westhaven"],
+        )
+        self.assertIsNone(week["Saturday dinner"]["crest"])
+        self.assertEqual(week["Saturday dinner"]["crests"], [])
+        self.assertNotIn("Invented Birthday", week)
+        self.assertNotIn("Invented Birthday", horizon)
+
+    def test_one_crest_when_opponent_logo_missing(self):
+        logos = _team_logos_map()
+        oregon = match_event_crests("Northbridge vs Pinecrest", logos)
+        self.assertEqual([row["id"] for row in oregon], ["northbridge"])
+        self.assertEqual(len(oregon), 1)
+        chelsea = match_event_crests("Harbor vs Riverton", logos)
+        self.assertEqual([row["id"] for row in chelsea], ["harbor"])
+        self.assertNotIn("invented-oregon.png", str(oregon))
+        snapshot = normalize_snapshot(
+            {
+                "updated_at": "2026-09-12T00:00:00+00:00",
+                "timezone": "America/New_York",
+                "events": [
+                    {
+                        "id": "northbridge-oregon",
+                        "title": "Northbridge vs Pinecrest",
+                        "start": "2026-09-12T19:30:00-04:00",
+                        "end": "2026-09-12T22:30:00-04:00",
+                        "all_day": False,
+                    }
+                ],
+            }
+        )
+        lists = split_home_events(
+            snapshot, now=NOW, timezone_name="America/New_York", team_logos=logos
+        )
+        event = lists["this_week"][0]
+        self.assertEqual([row["id"] for row in event["crests"]], ["northbridge"])
+        self.assertEqual(event["title"], "Northbridge vs Pinecrest")
+        self.assertEqual(len(lists["this_week"]), 1)
+
+    def test_longest_alias_wins_over_shorter_overlap(self):
+        logos = normalize_team_logos(
+            {
+                "match": [],
+                "teams": [
+                    {
+                        "id": "afc",
+                        "aliases": ["AFC"],
+                        "logo_url": "https://assets.example.com/team-1.png",
+                    },
+                    {
+                        "id": "bayport",
+                        "aliases": ["AFC Bayport", "Bayport"],
+                        "logo_url": "https://assets.example.com/team-349.png",
+                    },
+                    {
+                        "id": "harbor",
+                        "aliases": ["Harbor"],
+                        "logo_url": "https://assets.example.com/harbor.png",
+                    },
+                ],
+                "title_parse": {"separators": ["vs", "@", "against", "v", "—"]},
+            }
+        )
+        crests = match_event_crests("Harbor @ AFC Bayport…", logos)
+        self.assertEqual([row["id"] for row in crests], ["harbor", "bayport"])
+        self.assertNotEqual(crests[1]["id"], "afc")
+
+    def test_old_match_only_map_still_attaches_followed_crest(self):
+        old = normalize_team_logos(
+            {
+                "match": [
+                    {
+                        "id": "northbridge",
+                        "match_title_contains": ["Northbridge"],
+                        "logo_url": "https://assets.example.com/northbridge.png",
+                    }
+                ]
+            }
+        )
+        self.assertEqual(old["teams"], [])
+        self.assertEqual(match_team_crest("🏈 Northbridge vs Eastfield", old)["id"], "northbridge")
+        self.assertEqual(
+            [row["id"] for row in match_event_crests("Northbridge vs Eastfield", old)],
+            ["northbridge"],
+        )
+
+    def test_category_inference_and_google_color_id(self):
+        logos = _team_logos_map()
+        self.assertEqual(infer_event_category("Northbridge vs Eastfield", logos, crests=[{"id": "northbridge"}])["id"], "sports")
+        self.assertEqual(infer_event_category("Northbridge vs Eastfield", logos, crests=[{"id": "northbridge"}])["color"], "#2563eb")
+        self.assertEqual(infer_event_category("Band rehearsal", logos)["id"], "music")
+        self.assertEqual(infer_event_category("Band rehearsal", logos)["color"], "#be185d")
+        self.assertEqual(infer_event_category("Dinner with Sarah", logos)["id"], "family_friends")
+        self.assertEqual(infer_event_category("Mom birthday", logos)["id"], "family_friends")
+        self.assertEqual(infer_event_category("EWR → BTV", logos)["id"], "travel")
+        self.assertEqual(infer_event_category("October trip", logos)["id"], "travel")
+        self.assertEqual(infer_event_category("Saturday dinner", logos)["id"], "other")
+        self.assertEqual(infer_event_category("Dentist", logos)["id"], "other")
+        self.assertEqual(
+            infer_event_category(
+                "Northbridge vs Eastfield",
+                logos,
+                crests=[{"id": "northbridge"}],
+                google_color_id="4",
+            )["id"],
+            "music",
+        )
+        snapshot = normalize_snapshot(
+            {
+                "updated_at": "2026-09-12T00:00:00+00:00",
+                "timezone": "America/New_York",
+                "events": [
+                    {
+                        "id": "gig",
+                        "title": "Band rehearsal",
+                        "start": "2026-09-12T18:00:00-04:00",
+                        "end": "2026-09-12T20:00:00-04:00",
+                        "all_day": False,
+                    },
+                    {
+                        "id": "flight",
+                        "title": "EWR → BTV",
+                        "start": "2026-09-12T15:00:00-04:00",
+                        "end": "2026-09-12T16:30:00-04:00",
+                        "all_day": False,
+                    },
+                    {
+                        "id": "colored",
+                        "title": "Saturday dinner",
+                        "start": "2026-09-13T18:00:00-04:00",
+                        "end": "2026-09-13T20:00:00-04:00",
+                        "all_day": False,
+                        "google_color_id": "10",
+                    },
+                ],
+            }
+        )
+        lists = split_home_events(
+            snapshot, now=NOW, timezone_name="America/New_York", team_logos=logos
+        )
+        by_title = {event["title"]: event for event in lists["this_week"]}
+        self.assertEqual(by_title["Band rehearsal"]["category"]["id"], "music")
+        self.assertEqual(by_title["EWR → BTV"]["category"]["id"], "travel")
+        self.assertEqual(by_title["Saturday dinner"]["category"]["id"], "family_friends")
+        self.assertEqual(by_title["Saturday dinner"]["category"]["color"], "#059669")
+        self.assertNotIn("Invented Birthday", by_title)
+
+
+class IcsParseTests(unittest.TestCase):
+    def test_parse_ics_keeps_only_vevents(self):
+        ics = """BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:dinner
+DTSTART;TZID=America/New_York:20260912T180000
+DTEND;TZID=America/New_York:20260912T200000
+SUMMARY:Saturday dinner
+LOCATION:Home
+END:VEVENT
+BEGIN:VEVENT
+UID:trip
+DTSTART;TZID=America/New_York:20261005T090000
+DTEND;TZID=America/New_York:20261008T180000
+SUMMARY:October trip
+URL:https://example.com/trip
+END:VEVENT
+BEGIN:VEVENT
+UID:cancelled
+STATUS:CANCELLED
+DTSTART:20260912T150000Z
+SUMMARY:Cancelled thing
+END:VEVENT
+END:VCALENDAR
+"""
+        snapshot = parse_ics(ics, timezone_name="America/New_York", now=NOW)
+        titles = [event["title"] for event in snapshot["events"]]
+        self.assertIn("Saturday dinner", titles)
+        self.assertIn("October trip", titles)
+        self.assertNotIn("Cancelled thing", titles)
+        self.assertNotIn("Invented Birthday", titles)
+
+    def test_parse_ics_keeps_google_color_id(self):
+        ics = """BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:gig
+DTSTART;TZID=America/New_York:20260912T180000
+DTEND;TZID=America/New_York:20260912T200000
+SUMMARY:Band rehearsal
+COLOR:4
+END:VEVENT
+END:VCALENDAR
+"""
+        snapshot = parse_ics(ics, timezone_name="America/New_York", now=NOW)
+        self.assertEqual(snapshot["events"][0]["title"], "Band rehearsal")
+        self.assertEqual(snapshot["events"][0]["google_color_id"], "4")
+
+
+class CalendarStoreAndHomeTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.demo = load_tenant_from_path(_DEMO)
+        reset_tenant(self.demo)
+        self.store = MemoryS3Store()
+        self.calendar = CalendarStore(
+            store=self.store,
+            local_path=Path(self.tmp.name) / "snapshot.json",
+            team_logos_path=Path(self.tmp.name) / "team-logos.json",
+            timezone_name="America/New_York",
+            ics_url=None,
+            now=NOW,
+        )
+        reset_calendar(self.calendar)
+        self.board = ProjectBoard(
+            store=MemoryS3Store(configured=False),
+            local_path=Path(self.tmp.name) / "board.json",
+            tenant=self.demo,
+        )
+        reset_project_board(self.board)
+        self.client = _nav_app().test_client()
+
+    def tearDown(self):
+        reset_calendar()
+        reset_project_board()
+        reset_tenant()
+        self.tmp.cleanup()
+
+    def test_s3_key_stays_under_ops_calendar(self):
+        key = self.calendar.s3_key()
+        self.assertEqual(key, "ops/calendar/snapshot.json")
+        BucketLayout.require_ops_key(key)
+        self.assertFalse(key.startswith("public/"))
+        logos_key = self.calendar.team_logos_s3_key()
+        self.assertEqual(logos_key, "ops/calendar/team-logos.json")
+        BucketLayout.require_ops_key(logos_key)
+        self.assertFalse(logos_key.startswith("public/"))
+
+    def test_repeat_home_visits_skip_calendar_reads_until_expiry(self):
+        snapshot = {"updated_at": "2026-09-12T00:00:00+00:00",
+                    "timezone": "America/New_York", "events": SNAPSHOT_EVENTS}
+        self.calendar.save(snapshot)
+        with patch("src.core.calendar.monotonic", return_value=100) as clock, \
+                patch.object(self.store, "get_json", wraps=self.store.get_json) as reads:
+            first = self.client.get("/").get_data(as_text=True)
+            self.assertIn("Saturday dinner", first)
+            self.assertEqual(reads.call_count, 2)
+            snapshot["events"] = []
+            self.store.put_json(self.calendar.s3_key(), snapshot)
+            clock.return_value = 129
+            self.assertEqual(self.client.get("/").get_data(as_text=True), first)
+            self.assertEqual(reads.call_count, 2)
+            clock.return_value = 130
+            self.assertNotIn("Saturday dinner", self.client.get("/").get_data(as_text=True))
+            self.assertEqual(reads.call_count, 4)
+
+    def test_save_invalidates_snapshot_and_callers_cannot_mutate_cache(self):
+        snapshot = {"timezone": "America/New_York", "events": SNAPSHOT_EVENTS}
+        self.calendar.save(snapshot)
+        result = self.calendar.load()
+        result["events"].clear()
+        self.assertTrue(self.calendar.load()["events"])
+        self.calendar.save({"timezone": "America/New_York", "events": []})
+        self.assertEqual(self.calendar.load()["events"], [])
+
+    def test_failed_ics_fetch_is_retried_after_cache_expires(self):
+        self.calendar._ics_url = "https://example.invalid/calendar.ics"
+        with patch("src.core.calendar.monotonic", return_value=100) as clock, \
+                patch("src.core.calendar.fetch_ics", side_effect=TimeoutError) as fetch:
+            self.assertIsNone(self.calendar.load(now=NOW))
+            self.assertIsNone(self.calendar.load(now=NOW))
+            self.assertEqual(fetch.call_count, 1)
+            clock.return_value = 130
+            self.assertIsNone(self.calendar.load(now=NOW))
+            self.assertEqual(fetch.call_count, 2)
+
+    def test_cached_snapshot_still_recalculates_visible_dates(self):
+        self.calendar.save({"timezone": "America/New_York", "events": SNAPSHOT_EVENTS})
+        with patch("src.core.calendar.monotonic", return_value=100), \
+                patch.object(self.store, "get_json", wraps=self.store.get_json) as reads:
+            first = self.calendar.home_lists(now=NOW)
+            later = self.calendar.home_lists(now=datetime(2026, 9, 14, 12, tzinfo=ET))
+            self.assertNotEqual(first["this_week"], later["this_week"])
+            self.assertEqual(reads.call_count, 2)
+
+    def test_home_empty_state_without_snapshot(self):
+        html = self.client.get("/").get_data(as_text=True)
+        self.assertIn("This week", html)
+        self.assertIn("On the horizon", html)
+        self.assertIn("No calendar snapshot yet.", html)
+        self.assertNotIn("Saturday dinner", html)
+        self.assertNotIn("Invented Birthday", html)
+        self.assertNotIn("Team standup", html)
+        self._assert_home_calendar_has_no_operator_chrome(html)
+
+    def test_home_splits_this_week_and_horizon_from_snapshot(self):
+        self.calendar.save(
+            {
+                "updated_at": "2026-09-12T00:00:00+00:00",
+                "timezone": "America/New_York",
+                "events": SNAPSHOT_EVENTS,
+            }
+        )
+        html = self.client.get("/").get_data(as_text=True)
+        week = html.split('data-calendar="this-week"')[1].split('data-calendar="horizon"')[0]
+        horizon = html.split('data-calendar="horizon"')[1]
+        self.assertIn("Saturday dinner", week)
+        self.assertIn("Sunday hike", week)
+        self.assertNotIn("October trip", week)
+        self.assertIn("October trip", horizon)
+        self.assertNotIn("Saturday dinner", horizon)
+        self.assertNotIn("Past standup", html)
+        self.assertIn("Next Friday gap", horizon)
+        self.assertNotIn("Next Friday gap", week)
+        self.assertNotIn("Far away", html)
+        self.assertNotIn("Invented Birthday", html)
+        self.assertIn("https://example.com/trip", html)
+        self.assertIn('data-cal-day="2026-09-12"', week)
+        self.assertIn("Sat 12", week)
+        self.assertIn("Sun 13", week)
+        self.assertIn("6–8 PM", week)
+        self.assertNotIn("Sat Sep 12 ·", week)
+        self.assertNotIn("Sun Sep 13 ·", week)
+        self.assertIn('data-cal-day="2026-09-18"', horizon)
+        self.assertIn("Fri Sep 18", horizon)
+        self.assertIn("Mon Oct 5", horizon)
+        self.assertNotIn("Fri Sep 18 ·", horizon)
+        self._assert_home_calendar_has_no_operator_chrome(html)
+
+    def test_home_calendar_html_hides_iana_and_noisy_locations(self):
+        self.calendar.save(
+            {
+                "updated_at": "2026-09-12T00:00:00+00:00",
+                "timezone": "America/New_York",
+                "events": [
+                    {
+                        "id": "flight",
+                        "title": "EWR → BTV",
+                        "start": "2026-09-12T15:00:00-04:00",
+                        "end": "2026-09-12T16:30:00-04:00",
+                        "all_day": False,
+                        "location": "EWR → BTV",
+                    },
+                    {
+                        "id": "dentist",
+                        "title": "Dentist",
+                        "start": "2026-09-13T14:00:00-04:00",
+                        "end": "2026-09-13T14:45:00-04:00",
+                        "all_day": False,
+                        "location": "123 Main St, Apt 4B, Brooklyn, NY 11201",
+                    },
+                    {
+                        "id": "pizza",
+                        "title": "Pizza",
+                        "start": "2026-09-18T18:00:00-04:00",
+                        "end": "2026-09-18T19:00:00-04:00",
+                        "all_day": False,
+                        "location": "Lucali, 456 5th Ave, New York, NY 10001",
+                    },
+                ],
+            }
+        )
+        html = self.client.get("/").get_data(as_text=True)
+        week = html.split('data-calendar="this-week"')[1].split('data-calendar="horizon"')[0]
+        horizon = html.split('data-calendar="horizon"')[1]
+        self._assert_home_calendar_has_no_operator_chrome(html)
+        self.assertEqual(week.count("EWR → BTV"), 1)
+        self.assertNotIn("123 Main St", html)
+        self.assertNotIn("Apt 4B", html)
+        self.assertIn("Brooklyn", week)
+        self.assertIn("Lucali", horizon)
+        self.assertNotIn("456 5th Ave", html)
+        self.assertNotIn("ops/calendar/snapshot", html)
+        self.assertNotIn("last-synced", html)
+        self.assertNotIn("last synced", html)
+
+    def test_home_shows_crests_for_matched_titles_only(self):
+        self.store.put_json(
+            BucketLayout.calendar_team_logos_key(),
+            json.loads(_TEAM_LOGOS.read_text(encoding="utf-8")),
+        )
+        self.calendar.save(
+            {
+                "updated_at": "2026-09-12T00:00:00+00:00",
+                "timezone": "America/New_York",
+                "events": SNAPSHOT_EVENTS
+                + [
+                    {
+                        "id": "northbridge-game",
+                        "title": "Northbridge vs Pinecrest",
+                        "start": "2026-09-12T19:30:00-04:00",
+                        "end": "2026-09-12T22:30:00-04:00",
+                        "all_day": False,
+                    },
+                    {
+                        "id": "harbor-game",
+                        "title": "Harbor vs Riverton",
+                        "start": "2026-09-20T11:00:00-04:00",
+                        "end": "2026-09-20T13:00:00-04:00",
+                        "all_day": False,
+                    },
+                ],
+            }
+        )
+        html = self.client.get("/").get_data(as_text=True)
+        week = html.split('data-calendar="this-week"')[1].split('data-calendar="horizon"')[0]
+        horizon = html.split('data-calendar="horizon"')[1]
+        self.assertIn("Northbridge vs Pinecrest", week)
+        self.assertIn('data-cal-crest="northbridge"', week)
+        self.assertIn("https://assets.example.com/northbridge.png", week)
+        self.assertNotIn('data-cal-crest="harbor"', week)
+        self.assertIn("Harbor vs Riverton", horizon)
+        self.assertIn('data-cal-crest="harbor"', horizon)
+        self.assertIn("https://assets.example.com/harbor.png", horizon)
+        self.assertNotIn("Northbridge vs Pinecrest", horizon)
+        self.assertNotIn("Invented Birthday", html)
+        self.assertEqual(week.count("data-cal-crest="), 1)
+        self.assertEqual(horizon.count("data-cal-crest="), 1)
+        dinner = week[week.find("Saturday dinner") - 400 : week.find("Saturday dinner") + 40]
+        self.assertNotIn("data-cal-crest", dinner)
+        self._assert_home_calendar_has_no_operator_chrome(html)
+
+    def test_home_matches_emoji_prefixed_northbridge_and_harbor_titles(self):
+        self.store.put_json(
+            BucketLayout.calendar_team_logos_key(),
+            json.loads(_TEAM_LOGOS.read_text(encoding="utf-8")),
+        )
+        self.calendar.save(
+            {
+                "updated_at": "2026-09-12T00:00:00+00:00",
+                "timezone": "America/New_York",
+                "events": SNAPSHOT_EVENTS
+                + [
+                    {
+                        "id": "northbridge-game",
+                        "title": "🏈 Northbridge vs Pinecrest",
+                        "start": "2026-09-12T19:30:00-04:00",
+                        "end": "2026-09-12T22:30:00-04:00",
+                        "all_day": False,
+                    },
+                    {
+                        "id": "harbor-game",
+                        "title": "⚽ Harbor vs Riverton",
+                        "start": "2026-09-20T11:00:00-04:00",
+                        "end": "2026-09-20T13:00:00-04:00",
+                        "all_day": False,
+                    },
+                ],
+            }
+        )
+        html = self.client.get("/").get_data(as_text=True)
+        week = html.split('data-calendar="this-week"')[1].split('data-calendar="horizon"')[0]
+        horizon = html.split('data-calendar="horizon"')[1]
+        self.assertIn("🏈 Northbridge vs Pinecrest", week)
+        self.assertIn('data-cal-crest="northbridge"', week)
+        self.assertIn("⚽ Harbor vs Riverton", horizon)
+        self.assertIn('data-cal-crest="harbor"', horizon)
+        self.assertIn("Saturday dinner", week)
+        self.assertIn("October trip", horizon)
+        self.assertNotIn("Invented Birthday", html)
+        self.assertEqual(week.count("data-cal-crest="), 1)
+        self.assertEqual(horizon.count("data-cal-crest="), 1)
+        self._assert_home_calendar_has_no_operator_chrome(html)
+
+    def test_home_shows_two_crests_for_known_opponents(self):
+        self.store.put_json(
+            BucketLayout.calendar_team_logos_key(),
+            json.loads(_TEAM_LOGOS.read_text(encoding="utf-8")),
+        )
+        self.calendar.save(
+            {
+                "updated_at": "2026-09-12T00:00:00+00:00",
+                "timezone": "America/New_York",
+                "events": SNAPSHOT_EVENTS
+                + [
+                    {
+                        "id": "northbridge-eastfield",
+                        "title": "Northbridge vs Eastfield",
+                        "start": "2026-09-12T19:30:00-04:00",
+                        "end": "2026-09-12T22:30:00-04:00",
+                        "all_day": False,
+                    },
+                    {
+                        "id": "northbridge-lakeside",
+                        "title": "Northbridge @ Lakeside",
+                        "start": "2026-09-12T16:00:00-04:00",
+                        "end": "2026-09-12T19:00:00-04:00",
+                        "all_day": False,
+                    },
+                    {
+                        "id": "harbor-spurs",
+                        "title": "Harbor vs Westhaven…",
+                        "start": "2026-09-20T11:00:00-04:00",
+                        "end": "2026-09-20T13:00:00-04:00",
+                        "all_day": False,
+                    },
+                    {
+                        "id": "harbor-afc",
+                        "title": "Harbor @ AFC Bayport…",
+                        "start": "2026-09-21T11:00:00-04:00",
+                        "end": "2026-09-21T13:00:00-04:00",
+                        "all_day": False,
+                    },
+                ],
+            }
+        )
+        html = self.client.get("/").get_data(as_text=True)
+        week = html.split('data-calendar="this-week"')[1].split('data-calendar="horizon"')[0]
+        horizon = html.split('data-calendar="horizon"')[1]
+        self.assertIn("Northbridge vs Eastfield", week)
+        self.assertIn('data-cal-crest="northbridge"', week)
+        self.assertIn('data-cal-crest="eastfield"', week)
+        self.assertIn("https://assets.example.com/team-2509.png", week)
+        self.assertIn('data-cal-crest="lakeside"', week)
+        self.assertIn("Harbor vs Westhaven…", horizon)
+        self.assertIn('data-cal-crest="harbor"', horizon)
+        self.assertIn('data-cal-crest="westhaven"', horizon)
+        self.assertIn('data-cal-crest="bayport"', horizon)
+        eastfield_at = week.find("Northbridge vs Eastfield")
+        eastfield_block = week[max(0, eastfield_at - 700) : eastfield_at + 80]
+        self.assertIn('data-cal-crest="northbridge"', eastfield_block)
+        self.assertIn('data-cal-crest="eastfield"', eastfield_block)
+        self.assertEqual(eastfield_block.count("data-cal-crest="), 2)
+        self.assertNotIn("Invented Birthday", html)
+        self._assert_home_calendar_has_no_operator_chrome(html)
+
+    def test_home_category_colors_on_week_and_horizon(self):
+        self.store.put_json(
+            BucketLayout.calendar_team_logos_key(),
+            json.loads(_TEAM_LOGOS.read_text(encoding="utf-8")),
+        )
+        self.calendar.save(
+            {
+                "updated_at": "2026-09-12T00:00:00+00:00",
+                "timezone": "America/New_York",
+                "events": [
+                    {
+                        "id": "northbridge-eastfield",
+                        "title": "Northbridge vs Eastfield",
+                        "start": "2026-09-12T19:30:00-04:00",
+                        "end": "2026-09-12T22:30:00-04:00",
+                        "all_day": False,
+                    },
+                    {
+                        "id": "rehearsal",
+                        "title": "Band rehearsal",
+                        "start": "2026-09-12T18:00:00-04:00",
+                        "end": "2026-09-12T20:00:00-04:00",
+                        "all_day": False,
+                    },
+                    {
+                        "id": "flight",
+                        "title": "EWR → BTV",
+                        "start": "2026-09-13T15:00:00-04:00",
+                        "end": "2026-09-13T16:30:00-04:00",
+                        "all_day": False,
+                    },
+                    {
+                        "id": "dinner",
+                        "title": "Dinner with Sarah",
+                        "start": "2026-09-18T18:00:00-04:00",
+                        "end": "2026-09-18T20:00:00-04:00",
+                        "all_day": False,
+                    },
+                    {
+                        "id": "dentist",
+                        "title": "Dentist",
+                        "start": "2026-09-19T14:00:00-04:00",
+                        "end": "2026-09-19T14:45:00-04:00",
+                        "all_day": False,
+                    },
+                ],
+            }
+        )
+        html = self.client.get("/").get_data(as_text=True)
+        week = html.split('data-calendar="this-week"')[1].split('data-calendar="horizon"')[0]
+        horizon = html.split('data-calendar="horizon"')[1]
+        self.assertIn('data-cal-category="sports"', week)
+        self.assertIn("#2563eb", week)
+        self.assertIn('data-cal-category="music"', week)
+        self.assertIn("#be185d", week)
+        self.assertIn('data-cal-category="travel"', week)
+        self.assertIn("#d97706", week)
+        self.assertIn('data-cal-category="family_friends"', horizon)
+        self.assertIn("#059669", horizon)
+        self.assertIn('data-cal-category="other"', horizon)
+        self.assertIn("#6b7280", horizon)
+        self.assertNotIn("Invented Birthday", html)
+        self._assert_home_calendar_has_no_operator_chrome(html)
+
+    def test_home_survives_missing_team_logo_map(self):
+        self.calendar.save(
+            {
+                "updated_at": "2026-09-12T00:00:00+00:00",
+                "timezone": "America/New_York",
+                "events": SNAPSHOT_EVENTS
+                + [
+                    {
+                        "id": "northbridge-game",
+                        "title": "Northbridge vs Pinecrest",
+                        "start": "2026-09-12T19:30:00-04:00",
+                        "end": "2026-09-12T22:30:00-04:00",
+                        "all_day": False,
+                    }
+                ],
+            }
+        )
+        self.assertEqual(self.calendar.load_team_logos()["match"], [])
+        self.assertEqual(self.calendar.load_team_logos()["teams"], [])
+        html = self.client.get("/").get_data(as_text=True)
+        self.assertIn("Northbridge vs Pinecrest", html)
+        self.assertIn("Saturday dinner", html)
+        self.assertNotIn("data-cal-crest", html)
+        self.assertNotIn("espncdn.com", html)
+        self.assertNotIn("Invented Birthday", html)
+        self._assert_home_calendar_has_no_operator_chrome(html)
+
+    def test_home_uses_local_team_logo_map_when_s3_missing(self):
+        self.calendar.team_logos_path.write_text(
+            _TEAM_LOGOS.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        self.calendar.save(
+            {
+                "updated_at": "2026-09-12T00:00:00+00:00",
+                "timezone": "America/New_York",
+                "events": [
+                    {
+                        "id": "northbridge-game",
+                        "title": "Northbridge vs Pinecrest",
+                        "start": "2026-09-12T19:30:00-04:00",
+                        "end": "2026-09-12T22:30:00-04:00",
+                        "all_day": False,
+                    }
+                ],
+            }
+        )
+        html = self.client.get("/").get_data(as_text=True)
+        self.assertIn('data-cal-crest="northbridge"', html)
+        self._assert_home_calendar_has_no_operator_chrome(html)
+
+    def test_ics_refresh_caches_snapshot(self):
+        ics = """BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:dinner
+DTSTART;TZID=America/New_York:20260912T180000
+DTEND;TZID=America/New_York:20260912T200000
+SUMMARY:Saturday dinner
+END:VEVENT
+END:VCALENDAR
+"""
+        self.calendar._ics_url = "https://example.invalid/secret.ics"
+        snapshot = self.calendar.refresh_from_ics(now=NOW, ics_text=ics)
+        self.assertEqual([event["title"] for event in snapshot["events"]], ["Saturday dinner"])
+        self.assertIn(BucketLayout.calendar_snapshot_key(), self.store.objects)
+        reloaded = self.calendar.load_snapshot()
+        self.assertEqual(reloaded["events"][0]["title"], "Saturday dinner")
+
+    def _assert_home_calendar_has_no_operator_chrome(self, html: str) -> None:
+        calendar_html = html
+        if 'data-calendar="this-week"' in html:
+            calendar_html = html[html.find('data-calendar="this-week"') :]
+        self.assertNotIn("America/New_York", calendar_html)
+        self.assertNotIn("Europe/London", calendar_html)
+        self.assertNotIn("America/Los_Angeles", calendar_html)
+        self.assertNotRegex(calendar_html, r"(?:America|Europe|Asia|Pacific|Africa|Australia)/[A-Za-z_]+")

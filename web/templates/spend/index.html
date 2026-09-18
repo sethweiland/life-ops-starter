@@ -1,0 +1,717 @@
+{% extends "base.html" %}
+
+{% block title %}Spend · Ops{% endblock %}
+
+{% block content %}
+<style>
+    .spend-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 24px;
+        gap: 20px;
+        flex-wrap: wrap;
+    }
+    .spend-header h1 {
+        margin: 0;
+        font-size: 28px;
+    }
+    .data-source-badge {
+        background: #fff;
+        padding: 8px 14px;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,.12);
+        font-size: 13px;
+        color: #666;
+    }
+    
+    .summary-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+        margin-bottom: 32px;
+    }
+    .summary-card {
+        background: #fff;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 1px 3px rgba(0,0,0,.12);
+    }
+    .summary-card .number {
+        font-size: 36px;
+        font-weight: 700;
+        color: #1a1a2e;
+    }
+    .summary-card .number.total {
+        color: #1a73e8;
+    }
+    .summary-card .number.active {
+        color: #4caf50;
+    }
+    .summary-card .number.cancelling {
+        color: #ff9800;
+    }
+    .summary-card .number.cancelled {
+        color: #999;
+    }
+    .summary-card .label {
+        font-size: 13px;
+        color: #666;
+        margin-top: 4px;
+    }
+    
+    .spend-section {
+        margin-bottom: 32px;
+    }
+    .spend-section h2 {
+        font-size: 20px;
+        margin-bottom: 16px;
+        color: #1a1a2e;
+    }
+    
+    .spend-table {
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,.12);
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .spend-table table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    .spend-table th,
+    .spend-table td {
+        padding: 14px 16px;
+        text-align: left;
+        border-bottom: 1px solid #e0e0e0;
+    }
+    .spend-table th {
+        background: #fafafa;
+        font-weight: 600;
+        color: #555;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .spend-table tr:last-child td {
+        border-bottom: none;
+    }
+    .spend-table tr:hover {
+        background: #f9f9f9;
+    }
+    
+    .service-name {
+        font-weight: 600;
+        color: #1a1a2e;
+    }
+    .service-vendor {
+        font-size: 13px;
+        color: #888;
+        display: block;
+        margin-top: 2px;
+    }
+    
+    .amount {
+        font-weight: 600;
+        color: #1a1a2e;
+        font-size: 15px;
+    }
+    .amount.live {
+        color: #1a73e8;
+    }
+    
+    .status-badge {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+    .status-badge.active {
+        background: #e8f5e9;
+        color: #2e7d32;
+    }
+    .status-badge.cancelling {
+        background: #fff3e0;
+        color: #e65100;
+    }
+    .status-badge.cancelled {
+        background: #f5f5f5;
+        color: #999;
+    }
+    
+    .cadence {
+        font-size: 13px;
+        color: #666;
+    }
+    
+    .notes {
+        font-size: 13px;
+        color: #666;
+        font-style: italic;
+        max-width: 420px;
+    }
+    .phase-note {
+        font-style: normal;
+        margin-top: 8px;
+        padding: 8px 10px;
+        border-radius: 6px;
+        line-height: 1.4;
+        color: #333;
+    }
+    .phase-note.trial {
+        background: #e8f5e9;
+        border: 1px solid #c8e6c9;
+    }
+    .phase-note.post-trial {
+        background: #fff8e1;
+        border: 1px solid #ffe082;
+    }
+    .phase-note strong {
+        display: block;
+        margin-bottom: 2px;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+    }
+    .phase-note.trial strong {
+        color: #2e7d32;
+    }
+    .phase-note.post-trial strong {
+        color: #f57f17;
+    }
+    
+    .source-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11px;
+        color: #888;
+    }
+    .source-indicator.live {
+        color: #1a73e8;
+        font-weight: 600;
+    }
+    
+    .warning-box {
+        background: #fff3e0;
+        border: 1px solid #ffe0b2;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 16px;
+        font-size: 13px;
+        color: #e65100;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 40px;
+        color: #999;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,.12);
+    }
+    
+    .info-note {
+        background: #e3f2fd;
+        border: 1px solid #90caf9;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 24px;
+        font-size: 13px;
+        color: #1565c0;
+    }
+
+    .project-badge {
+        display: inline-block;
+        margin-top: 6px;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: 600;
+        background: #eef2ff;
+        color: #3730a3;
+    }
+    .project-badge.unallocated {
+        background: #f3f4f6;
+        color: #4b5563;
+        border: 1px dashed #9ca3af;
+    }
+
+    .project-layout {
+        display: grid;
+        grid-template-columns: 160px 1fr;
+        gap: 24px;
+        align-items: start;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,.12);
+        padding: 20px;
+        overflow-x: auto;
+    }
+    .project-layout .spend-table table {
+        min-width: 640px;
+    }
+    .project-pie {
+        width: 140px;
+        height: 140px;
+        border-radius: 50%;
+        background: #f3f4f6;
+        box-shadow: inset 0 0 0 1px rgba(0,0,0,.06);
+    }
+    .project-bar {
+        height: 8px;
+        background: #e5e7eb;
+        border-radius: 999px;
+        overflow: hidden;
+        min-width: 80px;
+    }
+    .project-bar > span {
+        display: block;
+        height: 100%;
+        border-radius: 999px;
+    }
+    .tokens-widget {
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,.12);
+        padding: 20px;
+        margin-bottom: 24px;
+    }
+    .tokens-widget h2 {
+        margin: 0 0 6px;
+        font-size: 20px;
+    }
+    .tokens-lede {
+        margin: 0 0 16px;
+        font-size: 13px;
+        color: #555;
+        max-width: 42em;
+    }
+    .tokens-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+    .tokens-stat {
+        background: #f8f9fb;
+        border-radius: 8px;
+        padding: 12px 14px;
+    }
+    .tokens-stat .number {
+        font-size: 22px;
+        font-weight: 700;
+        color: #1a1a2e;
+    }
+    .tokens-stat .label {
+        font-size: 12px;
+        color: #666;
+        margin-top: 2px;
+    }
+    .tokens-projects {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    .tokens-projects th,
+    .tokens-projects td {
+        text-align: left;
+        padding: 8px 10px 8px 0;
+        border-bottom: 1px solid #eee;
+        font-size: 13px;
+        vertical-align: top;
+    }
+    .tokens-projects th {
+        color: #555;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+    }
+    .tokens-projects tr[data-project="unallocated"] td:first-child .service-vendor,
+    .tokens-note {
+        color: #4b5563;
+    }
+    .tokens-legend {
+        margin: 12px 0 0;
+        font-size: 12px;
+        color: #555;
+        line-height: 1.45;
+    }
+    .tokens-empty {
+        margin: 0;
+        color: #666;
+        font-size: 14px;
+    }
+    @media (max-width: 720px) {
+        .project-layout {
+            grid-template-columns: 1fr;
+            justify-items: stretch;
+        }
+        .project-pie {
+            margin: 0 auto 8px;
+        }
+    }
+</style>
+
+<div class="spend-header">
+    <h1>Spend</h1>
+    {% if last_updated %}
+    <div class="data-source-badge">
+        Data as of: {{ last_updated }}
+    </div>
+    {% endif %}
+</div>
+
+<p class="ops-lede">A planning view of the costs you record. Recurring costs are monthly equivalents;
+usage is month to date. Totals are partial until your sources are complete, and are not a bill or bank balance.</p>
+<details class="info-note">
+    <summary>Sources and setup</summary>
+    <p>Subscription ledger: {{ ledger_source }}. AWS Cost Explorer: {{ 'enabled, cached hourly' if aws_enabled else 'off' }}.
+    Usage logs: {{ usage_providers or 'none selected' }}. Provider accounts are not connected automatically.</p>
+    <p>Start with one subscription, then verify one source at a time using <code>docs/onboarding/spend.md</code>.
+    All amounts are USD; annual charges are divided by 12 for planning.</p>
+</details>
+{% if ledger_warning %}<p class="warning-box">{{ ledger_warning }}</p>{% endif %}
+{% if aws_live and aws_live.error %}<p class="warning-box">{{ aws_live.error }}</p>
+{% elif aws_live %}<p class="info-note">AWS month to date: ${{ '%.2f'|format(aws_live.amount) }} · {{ aws_live.period }}.
+{% if aws_live.checked_at %}Checked {{ aws_live.checked_at }}.{% endif %} Billing data can lag.</p>{% endif %}
+
+{% if note %}
+<div class="info-note">
+    <strong>Note:</strong> {{ note }}
+</div>
+{% endif %}
+
+<div class="tokens-widget" id="tokens">
+    <h2>Tokens</h2>
+    {% if xai_usage and xai_usage.error %}
+    <p class="tokens-lede">Could not read this month’s usage log. No numbers invented.</p>
+    <div class="warning-box" style="margin-bottom: 0;">{{ xai_usage.error }}</div>
+    {% elif xai_usage and not xai_usage.error %}
+    <p class="tokens-lede">
+        {{ xai_usage.provider_label }} for {{ xai_usage.period }}.
+        Logged estimates are <strong>not</strong> provider invoices. Historical xAI records may use the documented fallback rate.
+        {% if xai_usage.source == 's3' %}· S3
+        {% elif xai_usage.source == 'local' %}· local
+        {% elif xai_usage.source == 'local_legacy_jsonl' %}· local jsonl
+        {% endif %}
+    </p>
+    {% for warning in xai_usage.warnings %}<p class="warning-box">{{ warning }}</p>{% endfor %}
+    {% if xai_usage.providers|length > 1 %}<p class="tokens-lede">{% for provider in xai_usage.providers %}{{ provider.id }}: {{ provider.calls }} calls ({{ provider.source }}){% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+    <div class="tokens-stats">
+        <div class="tokens-stat">
+            <div class="number">{{ xai_usage.calls }}</div>
+            <div class="label">{{ xai_usage.calls }} calls</div>
+        </div>
+        <div class="tokens-stat">
+            <div class="number">{{ "{:,}".format(xai_usage.tokens) }}</div>
+            <div class="label">{{ "{:,}".format(xai_usage.tokens) }} tokens</div>
+        </div>
+        <div class="tokens-stat">
+            <div class="number">${{ "%.2f"|format(xai_usage.amount) }}</div>
+            <div class="label">logged cost estimate (USD)</div>
+        </div>
+    </div>
+    {% if xai_usage.project_parts %}
+    <table class="tokens-projects">
+        <thead>
+            <tr>
+                <th>Project</th>
+                <th>Calls</th>
+                <th>Tokens</th>
+                <th>Estimated USD</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for part in xai_usage.project_parts %}
+            <tr data-token-project="{{ part.id }}">
+                <td>
+                    <div class="service-name">{{ part.name }} ${{ "%.2f"|format(part.amount) }}</div>
+                    {% if part.note %}
+                    <span class="service-vendor">{{ part.note }}</span>
+                    {% endif %}
+                </td>
+                <td>{{ part.calls }}</td>
+                <td>{{ "{:,}".format(part.tokens) }}</td>
+                <td class="amount">${{ "%.2f"|format(part.amount) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+    <p class="tokens-legend">
+        <strong>Unallocated:</strong> Missing project tag — shown on purpose.
+        <strong>Shared:</strong> overhead that is not one product.
+    </p>
+    {% else %}
+    <p class="tokens-lede">Application usage this month. Your tools must write usage records; signing in to an AI app does not connect its billing.</p>
+    <p class="tokens-empty">No token usage recorded this month.</p>
+    <p class="tokens-legend">
+        <strong>Unallocated:</strong> Missing project tag — shown on purpose.
+        <strong>Shared:</strong> overhead that is not one product.
+    </p>
+    {% endif %}
+</div>
+
+<!-- Summary Cards -->
+<div class="summary-cards">
+    <div class="summary-card">
+        <div class="number total">${{ "%.2f"|format(totals.total) }}</div>
+        <div class="label">Tracked planning total · USD</div>
+    </div>
+    
+    <div class="summary-card">
+        <div class="number" style="color: #2563eb;">${{ "%.2f"|format(totals.fixed) }}</div>
+        <div class="label">Fixed Costs</div>
+    </div>
+    
+    <div class="summary-card">
+        <div class="number" style="color: #8b5cf6;">${{ "%.2f"|format(totals.variable) }}</div>
+        <div class="label">Recorded variable costs + usage to date</div>
+    </div>
+    
+    <div class="summary-card">
+        <div class="number active">{{ status_counts.active }}</div>
+        <div class="label">Active</div>
+    </div>
+    
+    {% if status_counts.cancelling > 0 %}
+    <div class="summary-card">
+        <div class="number cancelling">{{ status_counts.cancelling }}</div>
+        <div class="label">Winding Down</div>
+    </div>
+    {% endif %}
+    
+    <div class="summary-card">
+        <div class="number cancelled">{{ status_counts.cancelled }}</div>
+        <div class="label">Cancelled</div>
+    </div>
+</div>
+
+<!-- By Project -->
+<div class="spend-section" id="by-project">
+    <h2>By Project <span style="font-weight: normal; color: #666; font-size: 16px;">&nbsp;&nbsp;${{ "%.2f"|format(project_rollup.total) }} tracked</span></h2>
+    <p class="notes" style="margin-top: -8px; margin-bottom: 16px; max-width: none;">
+        Tokens + allocated fixed/usage. Unallocated stays visible — unlabeled spend is never dropped to clean up the chart.
+        {% if xai_usage and xai_usage.legacy_untagged_xai_as_memes %}
+        Pre-tag xAI events without a project field are counted as Memes ({{ xai_usage.legacy_untagged_xai_as_memes }} this month).
+        {% endif %}
+    </p>
+
+    <div class="project-layout" style="margin-bottom: 16px;">
+        {% if project_rollup.pie_gradient %}
+        <div class="project-pie" style="background: conic-gradient({{ project_rollup.pie_gradient }});" role="img" aria-label="Spend share by project"></div>
+        {% else %}
+        <div class="project-pie" role="img" aria-label="No spend to chart"></div>
+        {% endif %}
+        <div class="spend-table" style="box-shadow: none; width: 100%;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Project</th>
+                        <th>Fixed</th>
+                        <th>Tokens</th>
+                        <th>Other usage</th>
+                        <th>Total</th>
+                        <th>Share</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in project_rollup.rows %}
+                    <tr data-project="{{ row.id }}">
+                        <td>
+                            <div class="service-name">{{ row.name }}</div>
+                            <span class="service-vendor">{{ row.description }}</span>
+                        </td>
+                        <td class="amount">${{ "%.2f"|format(row.fixed) }}</td>
+                        <td>
+                            <div class="amount">${{ "%.2f"|format(row.tokens) }}</div>
+                            {% if row.token_calls %}
+                            <div class="source-indicator">{{ "{:,}".format(row.token_tokens) }} tokens · {{ row.token_calls }} calls</div>
+                            {% endif %}
+                        </td>
+                        <td class="amount">${{ "%.2f"|format(row.other_variable) }}</td>
+                        <td class="amount">${{ "%.2f"|format(row.total) }}</td>
+                        <td>
+                            <div class="source-indicator">{{ "%.1f"|format(row.share_pct) }}%</div>
+                            <div class="project-bar" title="{{ row.name }} share">
+                                <span style="width: {{ row.share_pct }}%; background: {{ row.color }};"></span>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Fixed Costs Section -->
+{% if fixed_items %}
+<div class="spend-section">
+    <h2>🔒 Fixed Costs <span style="font-weight: normal; color: #666; font-size: 16px;">&nbsp;&nbsp;${{ "%.2f"|format(totals.fixed) }}/mo</span></h2>
+    
+    <div class="spend-table">
+        <table>
+            <thead>
+                <tr>
+                    <th>Service</th>
+                    <th>Amount</th>
+                    <th>Cadence</th>
+                    <th>Status</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sub in fixed_items %}
+                <tr>
+                    <td>
+                        <div class="service-name">{{ sub.name }}</div>
+                        <span class="service-vendor">{{ sub.vendor }}</span>
+                        <span class="project-badge{% if sub.project_tone == 'unallocated' %} unallocated{% endif %}">{{ sub.project_label }}</span>
+                    </td>
+                    <td>
+                        <div class="amount">${{ "%.2f"|format(sub.amount_usd) }}</div>
+                        <div class="source-indicator">config</div>
+                    </td>
+                    <td class="cadence">{{ sub.cadence }}</td>
+                    <td>
+                        <span class="status-badge {{ sub.status }}">{{ sub.status }}</span>
+                    </td>
+                    <td class="notes">{{ sub.notes or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Variable / Usage Section -->
+{% if variable_items %}
+<div class="spend-section">
+    <h2>📊 Variable / Usage <span style="font-weight: normal; color: #666; font-size: 16px;">&nbsp;&nbsp;${{ "%.2f"|format(totals.variable) }} recorded</span></h2>
+    
+    {% if aws_live and aws_live.error %}
+    <div class="warning-box">
+        <strong>AWS Cost Explorer Error:</strong> {{ aws_live.error }} — showing config fallback amount
+    </div>
+    {% endif %}
+    
+    <div class="spend-table">
+        <table>
+            <thead>
+                <tr>
+                    <th>Service</th>
+                    <th>Amount</th>
+                    <th>Cadence</th>
+                    <th>Status</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in variable_items %}
+                <tr>
+                    <td>
+                        <div class="service-name">{{ item.name }}</div>
+                        <span class="service-vendor">{{ item.vendor }}</span>
+                        {% if item.id != 'xai-tokens' %}
+                        <span class="project-badge{% if item.project_tone == 'unallocated' %} unallocated{% endif %}">{{ item.project_label }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if aws_live and not aws_live.error and item.id == 'aws' %}
+                        <div class="amount live">${{ "%.2f"|format(aws_live.amount) }}</div>
+                        <div class="source-indicator live">
+                            ✓ live API ({{ aws_live.period }})
+                        </div>
+                        {% elif xai_usage and not xai_usage.error and item.id in xai_usage.replaces %}
+                        <div class="amount live">See usage logs above</div>
+                        <div class="source-indicator live">Saved amount replaced by this provider's log</div>
+                        {% else %}
+                        <div class="amount">${{ "%.2f"|format(item.amount_usd) }}</div>
+                        <div class="source-indicator">
+                            saved ledger amount
+                        </div>
+                        {% endif %}
+                    </td>
+                    <td class="cadence">{{ item.cadence }}</td>
+                    <td>
+                        <span class="status-badge {{ item.status }}">{{ item.status }}</span>
+                    </td>
+                    <td class="notes">
+                        {{ item.notes or '—' }}
+                        {% if item.trial_note %}
+                        <div class="phase-note trial">
+                            <strong>Trial</strong>
+                            {{ item.trial_note }}
+                        </div>
+                        {% endif %}
+                        {% if item.post_trial_note %}
+                        <div class="phase-note post-trial">
+                            <strong>After trial</strong>
+                            {{ item.post_trial_note }}
+                        </div>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Cancelled Section -->
+{% if cancelled %}
+<div class="spend-section">
+    <h2>🗑️ Cancelled / Historical</h2>
+    
+    <div class="spend-table">
+        <table>
+            <thead>
+                <tr>
+                    <th>Service</th>
+                    <th>Last Amount</th>
+                    <th>Cadence</th>
+                    <th>Status</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in cancelled %}
+                <tr>
+                    <td>
+                        <div class="service-name">{{ item.name }}</div>
+                        <span class="service-vendor">{{ item.vendor }}</span>
+                        <span class="project-badge{% if item.project_tone == 'unallocated' %} unallocated{% endif %}">{{ item.project_label }}</span>
+                    </td>
+                    <td>
+                        <div class="amount">${{ "%.2f"|format(item.amount_usd) }}</div>
+                        {% if item.last_charge_date %}
+                        <div class="source-indicator">Last: {{ item.last_charge_date }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="cadence">{{ item.cadence }}</td>
+                    <td>
+                        <span class="status-badge cancelled">{{ item.status }}</span>
+                    </td>
+                    <td class="notes">{{ item.notes or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{% if not fixed_items and not variable_items and not cancelled %}
+<div class="empty-state">
+    <p><strong>No spend data configured</strong></p>
+    <p>Add your first subscription with the walkthrough in <code>docs/onboarding/spend.md</code>.
+    No bank credentials are needed. An empty ledger means no costs have been recorded, not that your real spending is zero.</p>
+</div>
+{% endif %}
+
+{% endblock %}

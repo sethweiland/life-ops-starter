@@ -1,0 +1,64 @@
+# Git
+.git/
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+
+# Virtual environments
+venv/
+env/
+.venv/
+.conda/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+secrets.local.json
+config/tenant.yaml
+data/tech_spend.json
+
+# Local S3 fallbacks
+data/usage/
+data/x_activity/
+data/projects/
+data/calendar/
+data/token_usage.jsonl
+data/grok_bot_routines.json
+private/
+instance/
+output/
+dist-public/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+tests/
+
+# Logs
+*.log
+logs/

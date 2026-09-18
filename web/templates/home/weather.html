@@ -1,0 +1,31 @@
+{% if weather.status == "ready" %}
+<p class="ops-weather-meta">{{ weather.label }} · Now through {{ weather.window_end }}</p>
+<ul class="ops-weather-cues">
+    {% for cue in weather.cues %}
+    <li><strong>{{ cue.title }}</strong><span>{{ cue.detail }}</span></li>
+    {% endfor %}
+</ul>
+<div class="ops-weather-facts">
+    <span>Feels like <strong>{{ weather.feels_low }}{% if weather.feels_high != weather.feels_low %}–{{ weather.feels_high }}{% endif %}{{ weather.temperature_unit }}</strong></span>
+    <span>Highest hourly precipitation chance <strong>{{ weather.peak_probability }}%</strong></span>
+    <span>Gusts up to <strong>{{ weather.gust }} {{ weather.wind_unit }}</strong></span>
+</div>
+{% if weather.evening %}
+<div class="ops-weather-facts" data-weather-evening>
+    {% if weather.evening.available %}
+    <span><strong>{{ weather.evening.label }}</strong> · {{ weather.evening.period }}<br>
+        Feels like <strong>{{ weather.evening.feels_low }}{% if weather.evening.feels_high != weather.evening.feels_low %}–{{ weather.evening.feels_high }}{% endif %}{{ weather.temperature_unit }}</strong></span>
+    <span>{{ weather.evening.clothing }}.</span>
+    {% else %}
+    <span>{{ weather.evening.label }}: forecast unavailable.</span>
+    {% endif %}
+</div>
+{% endif %}
+{% if weather.wet_window %}<p class="ops-weather-meta">Wet weather possible during {{ weather.wet_window }}; it may be intermittent.</p>{% endif %}
+<details class="ops-weather-credit">
+    <summary>Source</summary>
+    <p>Forecast from <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>. Summarized by Life Ops.</p>
+</details>
+{% else %}
+<p class="ops-weather-meta">{{ weather.message }}</p>
+{% endif %}

@@ -1,0 +1,535 @@
+"""Project board normalize / seed / lane move."""
+
+from __future__ import annotations
+
+import re
+import tempfile
+import unittest
+from pathlib import Path
+
+from flask import Blueprint, Flask
+
+import tests.bootstrap  # noqa: F401
+
+from src.core.calendar import CalendarStore, reset_calendar
+from src.core.project_board import (
+    ProjectBoard,
+    clip_one_line,
+    line_is_clipped,
+    merge_missing_from_tenant,
+    normalize_board,
+    normalize_project_card,
+    present_project,
+    reset_project_board,
+    seed_projects_from_tenant,
+    sort_projects,
+)
+from src.core.s3_store import BucketLayout
+from src.core.tenant import load_tenant_from_path, reset_tenant
+from tests.fakes import MemoryS3Store
+from web.blueprints.home import bp as home_bp
+from web.blueprints.projects import bp as projects_bp
+
+
+_ROOT = Path(__file__).resolve().parents[1]
+_WEB_ROOT = _ROOT / "web"
+_DEMO = Path(__file__).resolve().parent / "fixtures" / "demo_tenant.yaml"
+_EXAMPLE = _ROOT / "config" / "tenant.example.yaml"
+
+DEMO_IDS = {
+    "memes",
+    "personal-site",
+    "meal-planner",
+    "x",
+    "reading-list",
+    "garden-club",
+    "book-club",
+}
+
+
+def _nav_app():
+    app = Flask(
+        __name__,
+        template_folder=str(_WEB_ROOT / "templates"),
+        static_folder=str(_WEB_ROOT / "static"),
+    )
+    app.secret_key = "test"
+    for name, endpoint, path in (
+        ("spend", "index", "/spend/"),
+        ("x_activity", "index", "/x/"),
+        ("grok_bot", "index", "/grok-bot/"),
+        ("dashboard", "index", "/memes/"),
+        ("generate", "start", "/memes/generate/"),
+        ("video", "start", "/memes/video/"),
+        ("gallery", "index", "/memes/gallery/"),
+        ("daily_candidates", "index", "/memes/gallery/daily-candidates/"),
+        ("templates_review", "review_page", "/memes/templates/"),
+        ("discovery", "dashboard", "/memes/discovery/"),
+    ):
+        stub = Blueprint(name, name)
+        stub.add_url_rule(path, endpoint, lambda **_kwargs: "")
+        app.register_blueprint(stub)
+    app.register_blueprint(home_bp)
+    app.register_blueprint(projects_bp, url_prefix="/projects")
+    return app
+
+
+class NormalizeTests(unittest.TestCase):
+    def test_normalize_project_card_drops_spend_only_and_aliases_lane(self):
+        self.assertIsNone(normalize_project_card({"id": "shared", "name": "Shared"}))
+        self.assertIsNone(normalize_project_card({"id": "unallocated", "name": "Unallocated"}))
+        card = normalize_project_card(
+            {
+                "id": "Alpha-Bet",
+                "name": "Alpha",
+                "lane": "waiting_on_owner",
+                "owner_agent": "codex",
+                "links": {"repo": "https://example.com/r", "prod": ""},
+                "summary": "  ",
+                "last_done": None,
+                "next_steps": "",
+            }
+        )
+        self.assertEqual(card["id"], "alpha-bet")
+        self.assertEqual(card["lane"], "waiting_on_you")
+        self.assertEqual(card["owner_agent"], "codex")
+        self.assertEqual(card["links"]["repo"], "https://example.com/r")
+        self.assertIsNone(card["links"]["prod"])
+        self.assertIsNone(card["summary"])
+        self.assertIsNone(card["last_done"])
+        self.assertIsNone(card["next_steps"])
+
+    def test_normalize_board_wraps_bare_array(self):
+        board = normalize_board(
+            [{"id": "memes", "name": "Memes", "lane": "active"}, {"id": "shared"}]
+        )
+        self.assertEqual([p["id"] for p in board["projects"]], ["memes"])
+        self.assertIsNone(board["updated_at"])
+
+    def test_normalize_board_rejects_junk(self):
+        self.assertIsNone(normalize_board("nope"))
+        self.assertIsNone(normalize_board({"updated_at": "now"}))
+
+
+class SeedAndMoveTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.local_path = Path(self.tmp.name) / "board.json"
+        self.store = MemoryS3Store()
+        self.demo = load_tenant_from_path(_DEMO)
+        self.example = load_tenant_from_path(_EXAMPLE)
+        self.board = ProjectBoard(
+            store=self.store,
+            local_path=self.local_path,
+            tenant=self.demo,
+        )
+        reset_project_board(self.board)
+        reset_tenant(self.demo)
+
+    def tearDown(self):
+        reset_project_board()
+        reset_calendar()
+        reset_tenant()
+        self.tmp.cleanup()
+
+    def test_s3_key_stays_under_ops_projects(self):
+        key = self.board.s3_key()
+        self.assertEqual(key, "ops/projects/board.json")
+        self.assertTrue(key.startswith("ops/projects/"))
+        self.assertFalse(key.startswith("public/"))
+        BucketLayout.require_ops_key(key)
+
+    def test_seed_from_demo_tenant_has_seven_ids_no_unrelated_project(self):
+        cards = seed_projects_from_tenant(self.demo)
+        ids = [c["id"] for c in cards]
+        self.assertEqual(set(ids), DEMO_IDS)
+        self.assertNotIn("example-gym", ids)
+        self.assertNotIn("shared", ids)
+        self.assertNotIn("unallocated", ids)
+        for card in cards:
+            self.assertIsNone(card["last_done"])
+            self.assertIsNone(card["next_steps"])
+
+    def test_example_tenant_seeds_starter_cards(self):
+        cards = seed_projects_from_tenant(self.example)
+        ids = [c["id"] for c in cards]
+        self.assertIn("home-ops", ids)
+        self.assertEqual(len(ids), 3)
+        self.assertNotIn("memes", ids)
+        self.assertEqual(self.example.agents, [])
+        self.assertTrue(all(card["owner_agent"] is None for card in cards))
+
+    def test_ensure_seeded_write_through_once(self):
+        self.assertFalse(self.local_path.exists())
+        first = self.board.ensure_seeded()
+        self.assertTrue(self.local_path.exists())
+        self.assertIn(BucketLayout.projects_board_key(), self.store.objects)
+        self.assertEqual({p["id"] for p in first["projects"]}, DEMO_IDS)
+        puts = self.store.put_calls
+        second = self.board.ensure_seeded()
+        self.assertEqual(self.store.put_calls, puts)
+        self.assertEqual([p["id"] for p in second["projects"]], [p["id"] for p in first["projects"]])
+
+    def test_seed_local_only_when_bucket_unset(self):
+        local_only = ProjectBoard(
+            store=MemoryS3Store(configured=False),
+            local_path=Path(self.tmp.name) / "local-only.json",
+            tenant=self.example,
+        )
+        data = local_only.ensure_seeded()
+        self.assertEqual(len(data["projects"]), 3)
+        self.assertTrue((Path(self.tmp.name) / "local-only.json").exists())
+        self.assertEqual(len(self.store.objects), 0)
+
+    def test_lane_move(self):
+        self.board.ensure_seeded()
+        card = self.board.move_lane("memes", "waiting_on_you")
+        self.assertEqual(card["lane"], "waiting_on_you")
+        reloaded = self.board.load()
+        memes = next(p for p in reloaded["projects"] if p["id"] == "memes")
+        self.assertEqual(memes["lane"], "waiting_on_you")
+        self.assertIsNotNone(memes["updated_at"])
+
+    def test_lane_move_rejects_unknown_project_and_lane(self):
+        self.board.ensure_seeded()
+        self.assertIsNone(self.board.move_lane("example-gym", "active"))
+        self.assertIsNone(self.board.move_lane("memes", "sprint-backlog"))
+
+    def test_merge_missing_does_not_overwrite_lane(self):
+        board = {
+            "updated_at": "2026-09-11T00:00:00+00:00",
+            "projects": [
+                {
+                    "id": "memes",
+                    "name": "Memes",
+                    "lane": "waiting_on_you",
+                    "owner_agent": None,
+                    "links": {"repo": None, "prod": None},
+                    "summary": None,
+                    "last_done": None,
+                    "next_steps": None,
+                }
+            ],
+        }
+        merged, changed = merge_missing_from_tenant(board, self.demo)
+        self.assertTrue(changed)
+        by_id = {p["id"]: p for p in merged["projects"]}
+        self.assertEqual(by_id["memes"]["lane"], "waiting_on_you")
+        self.assertEqual(set(by_id), DEMO_IDS)
+
+    def test_save_rejects_bare_array(self):
+        with self.assertRaises(TypeError):
+            self.board.save([{"id": "memes"}])
+
+    def test_update_card_agent_contract(self):
+        self.board.ensure_seeded()
+        card = self.board.update_card(
+            "meal-planner",
+            lane="blocked",
+            last_done="Wrote the tenant seed",
+            next_steps="Human: pick a repo URL",
+        )
+        self.assertEqual(card["lane"], "blocked")
+        self.assertEqual(card["last_done"], "Wrote the tenant seed")
+        self.assertEqual(card["next_steps"], "Human: pick a repo URL")
+
+    def test_sort_projects_attention_then_name(self):
+        ordered = sort_projects(
+            [
+                {"id": "zebra", "name": "Zebra", "lane": "parked"},
+                {"id": "alpha", "name": "Alpha", "lane": "active"},
+                {"id": "beta", "name": "Beta", "lane": "waiting_on_you"},
+                {"id": "gamma", "name": "Gamma", "lane": "blocked"},
+                {"id": "delta", "name": "Delta", "lane": "idea"},
+                {"id": "aaa", "name": "Aaa", "lane": "active"},
+            ]
+        )
+        self.assertEqual(
+            [card["id"] for card in ordered],
+            ["beta", "gamma", "aaa", "alpha", "delta", "zebra"],
+        )
+
+    def test_clip_one_line_collapses_and_truncates(self):
+        wall = "Last done\n" + ("shipped a paragraph of notes " * 12)
+        clipped = clip_one_line(wall, 80)
+        self.assertNotIn("\n", clipped)
+        self.assertLessEqual(len(clipped), 80)
+        self.assertTrue(clipped.endswith("…"))
+        self.assertTrue(line_is_clipped(wall, clipped))
+        self.assertFalse(line_is_clipped("fits on one line", clip_one_line("fits on one line", 80)))
+        self.assertFalse(line_is_clipped(None, None))
+
+    def test_present_project_marks_clipped_fields(self):
+        shown = present_project(
+            {
+                "id": "long-bet",
+                "summary": "S" * 200,
+                "last_done": "Shipped the list",
+                "next_steps": "N" * 180,
+            }
+        )
+        self.assertTrue(shown["summary_clipped"])
+        self.assertFalse(shown["last_done_clipped"])
+        self.assertTrue(shown["next_steps_clipped"])
+        self.assertTrue(shown["summary_short"].endswith("…"))
+        self.assertEqual(shown["last_done_short"], "Shipped the list")
+        self.assertLess(len(shown["summary_short"]), 200)
+        short = present_project(
+            {
+                "id": "short-bet",
+                "summary": "One line bet",
+                "last_done": None,
+                "next_steps": "",
+            }
+        )
+        self.assertFalse(short["summary_clipped"])
+        self.assertFalse(short["last_done_clipped"])
+        self.assertFalse(short["next_steps_clipped"])
+        self.assertEqual(short["summary_short"], "One line bet")
+        self.assertIsNone(short["last_done_short"])
+
+
+class ProjectsPageTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.demo = load_tenant_from_path(_DEMO)
+        self.board = ProjectBoard(
+            store=MemoryS3Store(configured=False),
+            local_path=Path(self.tmp.name) / "board.json",
+            tenant=self.demo,
+        )
+        reset_project_board(self.board)
+        reset_calendar(
+            CalendarStore(
+                store=MemoryS3Store(configured=False),
+                local_path=Path(self.tmp.name) / "calendar.json",
+                ics_url=None,
+            )
+        )
+        reset_tenant(self.demo)
+        self.client = _nav_app().test_client()
+
+    def tearDown(self):
+        reset_project_board()
+        reset_calendar()
+        reset_tenant()
+        self.tmp.cleanup()
+
+    def test_demo_projects_page_shows_seven_cards(self):
+        response = self.client.get("/projects/")
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn("waiting_on_you", html)
+        self.assertIn("Waiting on you", html)
+        self.assertNotIn("waiting_on_owner", html)
+        self.assertNotIn("Kanban is not built yet", html)
+        self.assertNotIn("$", html)
+        for name in (
+            "Memes",
+            "portfolio.example.com",
+            "Meal Planner",
+            "X / Twitter",
+            "Reading List",
+            "Garden Club",
+            "Book Club",
+        ):
+            self.assertIn(name, html)
+        self.assertNotIn("Example Gym", html)
+        self.assertNotIn("kanban-col", html)
+        self.assertNotIn("No cards", html)
+        self.assertIn("project-row", html)
+        self.assertIn("project-chip", html)
+        for project_id in DEMO_IDS:
+            self.assertIn(f'id="project-{project_id}"', html)
+
+    def test_projects_deep_link_highlights_row(self):
+        response = self.client.get("/projects/?project=personal-site")
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertRegex(
+            html,
+            r'<article class="project-row is-target"\s+id="project-personal-site"',
+        )
+        self.assertIn('id="project-memes"', html)
+        self.assertNotRegex(
+            html,
+            r'<article class="project-row is-target"\s+id="project-memes"',
+        )
+
+    def test_projects_list_sorts_waiting_blocked_active_idea_parked(self):
+        self.board.save(
+            {
+                "updated_at": "2026-09-12T00:00:00+00:00",
+                "projects": [
+                    {"id": "zebra", "name": "Zebra", "lane": "parked"},
+                    {"id": "alpha", "name": "Alpha", "lane": "active", "owner_agent": "helper"},
+                    {"id": "beta", "name": "Beta", "lane": "waiting_on_you"},
+                    {"id": "gamma", "name": "Gamma", "lane": "blocked"},
+                    {"id": "delta", "name": "Delta", "lane": "idea"},
+                    {"id": "aaa", "name": "Aaa", "lane": "active", "owner_agent": "researcher"},
+                ],
+            }
+        )
+        html = self.client.get("/projects/").get_data(as_text=True)
+        ids = re.findall(r'<article class="project-row(?: is-target)?"\s+id="project-([^"]+)"', html)
+        expected = ["beta", "gamma", "aaa", "alpha", "delta", "zebra"]
+        self.assertEqual([pid for pid in ids if pid in expected], expected)
+        self.assertIn("Helper Agent", html)
+        self.assertIn("Research Agent", html)
+        self.assertNotIn("kanban-col", html)
+        self.assertNotIn("No cards", html)
+
+    def test_lane_move_api(self):
+        self.board.ensure_seeded()
+        response = self.client.post(
+            "/projects/api/projects/memes/lane",
+            json={"lane": "blocked"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["success"])
+        self.assertEqual(response.get_json()["lane"], "blocked")
+        memes = next(p for p in self.board.load()["projects"] if p["id"] == "memes")
+        self.assertEqual(memes["lane"], "blocked")
+
+    def test_lane_move_invalid_is_400(self):
+        self.board.ensure_seeded()
+        response = self.client.post(
+            "/projects/api/projects/memes/lane",
+            json={"lane": "doing"},
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_example_tenant_board_shows_starter_cards(self):
+        example = load_tenant_from_path(_EXAMPLE)
+        example_board = ProjectBoard(
+            store=MemoryS3Store(configured=False),
+            local_path=Path(self.tmp.name) / "example-board.json",
+            tenant=example,
+        )
+        reset_project_board(example_board)
+        reset_tenant(example)
+        response = self.client.get("/projects/")
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn("Home Ops", html)
+        self.assertIn("Side Project", html)
+        self.assertIn("Writing", html)
+        self.assertNotIn("Book Club", html)
+        self.assertNotIn("Reading List", html)
+        self.assertNotIn("waiting_on_owner", html)
+        reset_project_board(self.board)
+        reset_tenant(self.demo)
+
+    def test_home_lists_waiting_on_you_cards(self):
+        self.board.save(
+            {
+                "updated_at": "2026-09-11T00:00:00+00:00",
+                "projects": [
+                    {
+                        "id": "needs-a-call",
+                        "name": "Needs a call",
+                        "lane": "waiting_on_you",
+                        "owner_agent": None,
+                        "links": {"repo": None, "prod": None},
+                        "summary": None,
+                        "last_done": None,
+                        "next_steps": None,
+                    },
+                    {
+                        "id": "memes",
+                        "name": "Memes",
+                        "lane": "active",
+                        "owner_agent": None,
+                        "links": {"repo": None, "prod": None},
+                        "summary": None,
+                        "last_done": None,
+                        "next_steps": None,
+                    },
+                ],
+            }
+        )
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn("Waiting on you", html)
+        self.assertIn("Needs a call", html)
+        self.assertIn("/projects/", html)
+        self.assertNotIn("waiting_on_owner", html)
+        self.assertNotIn("Nothing queued", html)
+
+    def _article(self, html: str, project_id: str) -> str:
+        match = re.search(
+            rf'<article class="project-row(?: is-target)?"\s+id="project-{re.escape(project_id)}".*?</article>',
+            html,
+            re.S,
+        )
+        self.assertIsNotNone(match, f"missing article for {project_id}")
+        return match.group(0)
+
+    def test_clipped_fields_get_expandable_markup(self):
+        long_summary = ("Summary wall " + ("keep going " * 20)).strip()
+        long_next = ("Next wall " + ("then another step " * 16)).strip()
+        short_last = "Wrote the tenant seed"
+        short_summary = "Fits on one line"
+        self.board.save(
+            {
+                "updated_at": "2026-09-12T00:00:00+00:00",
+                "projects": [
+                    {
+                        "id": "long-card",
+                        "name": "Long Card",
+                        "lane": "active",
+                        "summary": long_summary,
+                        "last_done": short_last,
+                        "next_steps": long_next,
+                    },
+                    {
+                        "id": "short-card",
+                        "name": "Short Card",
+                        "lane": "idea",
+                        "summary": short_summary,
+                        "last_done": "Did a thing",
+                        "next_steps": "Do next",
+                    },
+                ],
+            }
+        )
+        html = self.client.get("/projects/").get_data(as_text=True)
+        long_row = self._article(html, "long-card")
+        short_row = self._article(html, "short-card")
+
+        summary_preview = clip_one_line(long_summary, 140)
+        next_preview = clip_one_line(long_next, 120)
+        self.assertTrue(summary_preview.endswith("…"))
+        self.assertTrue(next_preview.endswith("…"))
+
+        self.assertRegex(
+            long_row,
+            r'<details class="project-expand project-summary" data-field="summary">',
+        )
+        self.assertRegex(
+            long_row,
+            r'<details class="project-expand project-meta" data-field="next_steps">',
+        )
+        self.assertNotRegex(long_row, r'<details[^>]*data-field="last_done"')
+        self.assertIn(f'<span class="project-expand-preview">{summary_preview}</span>', long_row)
+        self.assertIn(f'<span class="project-expand-preview">{next_preview}</span>', long_row)
+        self.assertIn(f'<p class="project-expand-full">{long_summary}</p>', long_row)
+        self.assertIn(
+            f'<p class="project-expand-full"><span class="project-field-label">Next</span> {long_next}</p>',
+            long_row,
+        )
+        self.assertEqual(long_row.count(summary_preview), 1)
+        self.assertEqual(long_row.count(next_preview), 1)
+        self.assertIn(short_last, long_row)
+        self.assertIn('<p class="project-meta" data-field="last_done"', long_row)
+        self.assertNotIn(f'<p class="project-summary" data-field="summary">{summary_preview}</p>', long_row)
+
+        self.assertNotIn("<details", short_row)
+        self.assertNotIn("project-expand", short_row)
+        self.assertNotIn("More", short_row)
+        self.assertIn(f'<p class="project-summary" data-field="summary" title="{short_summary}">{short_summary}</p>', short_row)
+        self.assertIn('data-field="last_done"', short_row)
+        self.assertIn('data-field="next_steps"', short_row)
+        self.assertIn("Did a thing", short_row)
+        self.assertIn("Do next", short_row)

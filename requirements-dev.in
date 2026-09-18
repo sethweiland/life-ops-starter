@@ -1,0 +1,9 @@
+-r requirements.in
+pytest>=8.0.0
+pip-tools==7.6.1
+pip-audit==2.10.1
+bandit==1.9.4
+# Keep the lock installable on Python 3.11 as well as the 3.13 compiler host.
+typing-extensions>=4.6,<5
+# pytest/Bandit require this on Windows; include it when compiling on macOS.
+colorama>=0.4.6

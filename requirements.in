@@ -1,0 +1,9 @@
+# Runtime dependencies. Rebuild the hashed requirements.txt with pip-compile.
+flask>=3.1.0
+Flask-WTF>=1.3.0
+gunicorn>=23.0.0
+python-dotenv>=1.0.0
+pyyaml>=6.0.0
+boto3>=1.34.0
+python-dateutil>=2.8.0
+tzdata>=2025.1

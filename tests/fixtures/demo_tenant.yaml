@@ -1,0 +1,165 @@
+# Test fixture: operator-shaped tenant with modules on (Folders menu, X, memes).
+# Not the product default. New installations copy config/tenant.example.yaml.
+# last_done / next_steps stay empty when unknown.
+
+human:
+  name: Alex
+  timezone: America/New_York
+  handle: example_user
+
+site:
+  title: Ops
+  domain: ops.example.com
+
+modules:
+  projects: true
+  spend: true
+  x: true
+  grok_bot: true
+  memes: true
+  calendar: true
+
+calendar:
+  enabled: true           # Home This week / Horizon. Snapshot or env ICS — no OAuth.
+
+secrets:
+  backend: env
+
+agents:
+  - id: researcher
+    name: Research Agent
+  - id: helper
+    name: Helper Agent
+  - id: grok-bot
+    name: Grok Bot
+  - id: codex
+    name: Codex
+
+defaults:
+  usage_project: memes
+
+# Bookmarks-style Folders menu. Not a sixth primitive — nav only.
+# Projects omitted here still appear on /projects/.
+folders:
+  - id: music
+    name: Music
+    project_ids: [personal-site, garden-club, book-club]
+  - id: software
+    name: Software
+    project_ids: [memes, meal-planner, reading-list]
+    links:
+      - label: Dashboard
+        href: /memes/
+        project_id: memes
+      - label: Generate
+        href: /memes/generate/
+        project_id: memes
+      - label: Gallery
+        href: /memes/gallery/
+        project_id: memes
+      - label: Daily Queue
+        href: /memes/gallery/daily-candidates/
+        project_id: memes
+      - label: Templates
+        href: /memes/templates/
+        project_id: memes
+      - label: Video
+        href: /memes/video/
+        project_id: memes
+      - label: Discovery
+        href: /memes/discovery/
+        project_id: memes
+  - id: social
+    name: Social
+    project_ids: [x]
+  - id: agents
+    name: Agents
+    links:
+      - label: Grok Bot
+        href: /grok-bot/
+
+projects:
+  - id: memes
+    name: Memes
+    lane: active
+    owner_agent: null
+    color: "#2563eb"
+    description: Example media meme pipeline / life-ops-example / Imgflip / Fly / xAI from this repo
+    links:
+      repo: https://github.com/example/memes
+      prod: https://ops.example.com
+    summary: Example media meme pipeline / life-ops-example
+    last_done: null
+    next_steps: null
+  - id: personal-site
+    name: portfolio.example.com
+    lane: active
+    owner_agent: null
+    color: "#059669"
+    description: Musician site on Vercel
+    links:
+      repo: ""
+      prod: https://portfolio.example.com
+    summary: Musician site on Vercel
+    last_done: null
+    next_steps: null
+  - id: meal-planner
+    name: Meal Planner
+    lane: idea
+    owner_agent: null
+    color: "#d97706"
+    description: Fantasy-football / Meal Planner
+    links:
+      repo: ""
+      prod: ""
+    summary: Fantasy-football / Meal Planner
+    last_done: null
+    next_steps: null
+  - id: x
+    name: X / Twitter
+    lane: active
+    owner_agent: researcher
+    color: "#111827"
+    description: "@example_user activity. X-draft xAI calls set USAGE_PROJECT=x."
+    links:
+      repo: ""
+      prod: https://x.com/example_user
+    summary: "@example_user activity"
+    last_done: null
+    next_steps: null
+  - id: reading-list
+    name: Reading List
+    lane: idea
+    owner_agent: null
+    color: "#0d9488"
+    description: ""
+    links:
+      repo: ""
+      prod: ""
+    summary: ""
+    last_done: null
+    next_steps: null
+  - id: garden-club
+    name: Garden Club
+    lane: idea
+    owner_agent: null
+    color: "#be185d"
+    description: ""
+    links:
+      repo: ""
+      prod: ""
+    summary: ""
+    last_done: null
+    next_steps: null
+  - id: book-club
+    name: Book Club
+    lane: idea
+    owner_agent: null
+    color: "#65a30d"
+    description: ""
+    links:
+      repo: ""
+      prod: ""
+    summary: ""
+    last_done: null
+    next_steps: null

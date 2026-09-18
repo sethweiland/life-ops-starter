@@ -1,0 +1,13 @@
+/* Copy to instance/theme.css in your private installation to try this palette. */
+:root {
+    --page-bg: #f1f4ed;
+    --surface: #ffffff;
+    --text: #29382b;
+    --heading: #173826;
+    --accent: #26734b;
+    --nav-bg: #173826;
+    --font-body: Georgia, 'Times New Roman', serif;
+}
+.project-row, .ops-cal, .ops-waiting { border-radius: 16px; border: 1px solid #dbe5d3; }
+.project-name, h1, h2 { color: var(--heading); }
+.project-links a, .ops-cal-list a { color: var(--accent); }
