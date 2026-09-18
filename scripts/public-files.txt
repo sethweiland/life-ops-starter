@@ -75,6 +75,7 @@ tests/test_private_defaults.py
 tests/test_project_board.py
 tests/test_public_export.py
 tests/test_s3_store.py
+tests/test_storage_privacy.py
 tests/test_security.py
 tests/test_spend_connections.py
 tests/test_spend_projects.py

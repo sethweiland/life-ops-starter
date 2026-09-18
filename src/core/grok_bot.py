@@ -244,11 +244,7 @@ class GrokBotRoutines:
                 kind="private_ops",
                 content_type="application/json",
             )
-            logger.info(
-                "Saved Grok Bot routines to S3: s3://%s/%s",
-                self.store.bucket,
-                s3_key,
-            )
+            logger.info("Saved routines to S3")
             return True
         except Exception as e:
             logger.warning("Failed to save Grok Bot routines to S3: %s", e)
@@ -277,11 +273,7 @@ class GrokBotRoutines:
                     data, _etag = result
                     normalized = normalize_loaded(data)
                     if normalized is not None:
-                        logger.info(
-                            "Loaded Grok Bot routines from S3: s3://%s/%s",
-                            self.store.bucket,
-                            s3_key,
-                        )
+                        logger.info("Loaded routines from S3")
                         return normalized
             except Exception as e:
                 logger.warning("Failed to load Grok Bot routines from S3 (%s): %s", s3_key, e)

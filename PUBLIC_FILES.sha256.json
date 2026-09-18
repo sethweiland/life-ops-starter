@@ -167,7 +167,7 @@
     },
     {
       "path": "scripts/public-files.txt",
-      "digest": "95c48cd28f1580a896a44a24bb466141f0ef3477c4435a160e7dbd83ca30dd4f"
+      "digest": "509c9ddc232e00a6911ec90d7aeafbb040bb98c3156527cc502a1767dce1815b"
     },
     {
       "path": "scripts/setup_auth.py",
@@ -195,11 +195,11 @@
     },
     {
       "path": "src/core/grok_bot.py",
-      "digest": "47195e281b2c69c46435e95d86d2a55ae870963dc9b957e24a875a009f1cfce6"
+      "digest": "0827a785a3a3741c9c7c49f502c49d8ec9c605dbe6f08f213d686f953f348682"
     },
     {
       "path": "src/core/project_board.py",
-      "digest": "56797bcca89c44fc3a747cdddd74e91917e68fc41cd9cadbaea27a5107fcb725"
+      "digest": "aada0570a4b83a439f9e021601712ec4fd464ec5cf8a5d6dd84be8f32db9ca91"
     },
     {
       "path": "src/core/projects.py",
@@ -207,7 +207,7 @@
     },
     {
       "path": "src/core/s3_store.py",
-      "digest": "0ed8001870a9c04ec28e8fb3b14b415c9e88b0084aafa907f3a5bb3cd221615c"
+      "digest": "7c43fd84d3e159fd66db52baaf7e49576b622d17083c3cb51016a08e187bde85"
     },
     {
       "path": "src/core/secrets.py",
@@ -227,7 +227,7 @@
     },
     {
       "path": "src/core/token_tracker.py",
-      "digest": "8a2b113c4a2419e3956242234c381d21572b3ed4789270a7e7b384660a2c624c"
+      "digest": "9cdb453514bd9e5975a2c49839b2f622cdada2df87f7d5a379cff443796d206d"
     },
     {
       "path": "src/core/urls.py",
@@ -239,7 +239,7 @@
     },
     {
       "path": "src/core/x_activity.py",
-      "digest": "dfe80a81599eae602cc8b0163d7db9f10a961cbf54db4cd985493fa0a31cbe50"
+      "digest": "da2586ccada53ac95f156f4b5c304fa217675eef2e6f1b26e9a38ab2f19f233f"
     },
     {
       "path": "tests/__init__.py",
@@ -304,6 +304,10 @@
     {
       "path": "tests/test_s3_store.py",
       "digest": "5021d0a7bf89d49d70bd3a235c9e0151134c4a6225ede7e855a4ed21d7384379"
+    },
+    {
+      "path": "tests/test_storage_privacy.py",
+      "digest": "5df39d55150eeb7cdae73fa210711dd50fa4e7c6b4f6bdcab5d42d303c02887e"
     },
     {
       "path": "tests/test_security.py",

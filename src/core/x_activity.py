@@ -15,6 +15,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from werkzeug.utils import secure_filename
+
 from src.core.s3_store import BucketLayout, S3Store, get_s3_store
 
 
@@ -22,15 +24,18 @@ logger = logging.getLogger(__name__)
 
 KINDS = ("follow", "post", "reply")
 STATUSES = ("pending", "approved", "skipped", "posted")
-DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+DATE_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
 
 LOCAL_DIR = Path("data/x_activity")
 
 
 def require_date(date_str: str) -> str:
     if not DATE_RE.fullmatch(date_str or ""):
-        raise ValueError(f"invalid date: {date_str!r}")
-    return date_str
+        raise ValueError("Date must use YYYY-MM-DD")
+    try:
+        return datetime.strptime(date_str, "%Y-%m-%d").date().isoformat()
+    except ValueError:
+        raise ValueError("Date must be a valid calendar date") from None
 
 
 def normalize_loaded(data, date_str: str) -> Optional[dict]:
@@ -90,7 +95,12 @@ class XActivityQueue:
         return key
 
     def _local_path(self, date_str: str) -> Path:
-        return self.local_dir / f"{require_date(date_str)}.json"
+        filename = secure_filename(f"{require_date(date_str)}.json")
+        root = self.local_dir.resolve()
+        path = (root / filename).resolve()
+        if not path.is_relative_to(root):
+            raise ValueError("Queue file must stay within its storage directory")
+        return path
 
     def save(self, date_str: str, data: dict) -> bool:
         """Save queue JSON to S3 and local cache. Returns True if S3 write succeeded."""
@@ -104,7 +114,7 @@ class XActivityQueue:
         self.local_dir.mkdir(parents=True, exist_ok=True)
         local_path = self._local_path(date_str)
         local_path.write_bytes(json_bytes)
-        logger.info(f"Saved X activity to local: {local_path}")
+        logger.info("Saved X activity locally")
 
         if not self.store.configured:
             logger.warning("S3 bucket not configured, X activity saved locally only")
@@ -118,10 +128,10 @@ class XActivityQueue:
                 kind="private_ops",
                 content_type="application/json",
             )
-            logger.info(f"Saved X activity to S3: s3://{self.store.bucket}/{s3_key}")
+            logger.info("Saved X activity to S3")
             return True
-        except Exception as e:
-            logger.warning(f"Failed to save X activity to S3: {e}")
+        except Exception:
+            logger.warning("Failed to save X activity to S3")
             return False
 
     def load(self, date_str: str) -> Optional[dict]:
@@ -135,10 +145,10 @@ class XActivityQueue:
                     data, _etag = result
                     normalized = normalize_loaded(data, date_str)
                     if normalized is not None:
-                        logger.info(f"Loaded X activity from S3: s3://{self.store.bucket}/{s3_key}")
+                        logger.info("Loaded X activity from S3")
                         return normalized
-            except Exception as e:
-                logger.warning(f"Failed to load X activity from S3 ({s3_key}): {e}")
+            except Exception:
+                logger.warning("Failed to load X activity from S3; trying local records")
 
         local_path = self._local_path(date_str)
         if local_path.exists():
@@ -146,10 +156,10 @@ class XActivityQueue:
                 data = json.loads(local_path.read_text(encoding="utf-8"))
                 normalized = normalize_loaded(data, date_str)
                 if normalized is not None:
-                    logger.info(f"Loaded X activity from local: {local_path}")
+                    logger.info("Loaded X activity locally")
                     return normalized
-            except Exception as e:
-                logger.error(f"Failed to load local X activity: {e}")
+            except Exception:
+                logger.error("Failed to load local X activity")
 
         return None
 
@@ -163,17 +173,23 @@ class XActivityQueue:
                         continue
                     date_str = key[len(self.prefix) :].removeprefix("/").replace(".json", "")
                     if DATE_RE.fullmatch(date_str) and date_str not in dates_map:
-                        data = self.load(date_str)
+                        try:
+                            data = self.load(date_str)
+                        except ValueError:
+                            continue
                         if data:
                             dates_map[date_str] = summarize(data, date_str)
-            except Exception as e:
-                logger.warning(f"Failed to list S3 X activity files: {e}")
+            except Exception:
+                logger.warning("Failed to list S3 X activity files")
 
         if self.local_dir.exists():
             for file_path in self.local_dir.glob("*.json"):
                 date_str = file_path.stem
                 if DATE_RE.fullmatch(date_str) and date_str not in dates_map:
-                    data = self.load(date_str)
+                    try:
+                        data = self.load(date_str)
+                    except ValueError:
+                        continue
                     if data:
                         dates_map[date_str] = summarize(data, date_str)
 

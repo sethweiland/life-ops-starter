@@ -270,8 +270,7 @@ class S3Store:
             kwargs.pop("IfMatch", None)
             kwargs.pop("IfNoneMatch", None)
             logger.warning(
-                "boto3 put_object does not support conditional writes; writing %s unconditionally",
-                key,
+                "boto3 put_object does not support conditional writes; using an unconditional write"
             )
             response = self._put(kwargs)
         except Exception as exc:
@@ -284,8 +283,7 @@ class S3Store:
                 kwargs.pop("IfMatch", None)
                 kwargs.pop("IfNoneMatch", None)
                 logger.warning(
-                    "boto3 rejected conditional PutObject params; writing %s unconditionally",
-                    key,
+                    "boto3 rejected conditional PutObject params; using an unconditional write"
                 )
                 response = self._put(kwargs)
             else:

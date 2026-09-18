@@ -303,11 +303,7 @@ class ProjectBoard:
                 kind="private_ops",
                 content_type="application/json",
             )
-            logger.info(
-                "Saved project board to S3: s3://%s/%s",
-                self.store.bucket,
-                s3_key,
-            )
+            logger.info("Saved project board to S3")
             return True
         except Exception as e:
             logger.warning("Failed to save project board to S3: %s", e)
@@ -335,11 +331,7 @@ class ProjectBoard:
                     data, _etag = result
                     normalized = normalize_board(data)
                     if normalized is not None:
-                        logger.info(
-                            "Loaded project board from S3: s3://%s/%s",
-                            self.store.bucket,
-                            s3_key,
-                        )
+                        logger.info("Loaded project board from S3")
                         return normalized
             except Exception as e:
                 logger.warning("Failed to load project board from S3 (%s): %s", s3_key, e)

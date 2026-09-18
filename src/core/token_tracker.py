@@ -309,7 +309,7 @@ def _append_s3(
                 store.put_json(key, merged, if_match=etag)
             else:
                 store.put_json(key, merged, if_none_match="*")
-            logger.info("Saved usage to S3: s3://%s/%s", store.bucket, key)
+            logger.info("Saved usage to S3")
             return merged
         except PreconditionFailed as exc:
             last_error = exc
